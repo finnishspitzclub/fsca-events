@@ -1669,23 +1669,26 @@ def _clcy_tip(s):
 def _natl_shell(inner):
     css = (
         "html,body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#4a3f36;background:#fff}"
-        ".card{max-width:760px;margin:0 auto;border:1px solid #e7ddd4;border-radius:14px;overflow:hidden}"
-        ".hdr{background:#7a2e12;color:#fff;padding:16px 18px}"
+        ".card{max-width:1400px;margin:0 auto;border:1px solid #e7ddd4;border-radius:14px;overflow:hidden}"
+        ".hdr{background:#7a2e12;color:#fff;padding:15px 20px}"
         ".hdr .lbl{font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:#f0c9b5;font-weight:700}"
-        ".hdr .ttl{font-size:1.4rem;font-weight:800;margin-top:3px;line-height:1.15}"
+        ".hdr .ttl{font-size:1.5rem;font-weight:800;margin-top:3px;line-height:1.15}"
         ".hdr .sub{color:#f3d9c9;margin-top:2px;font-size:.95rem}"
-        ".bd{padding:16px 18px}"
+        ".bd{padding:16px 20px 18px}"
+        ".grid{display:grid;grid-template-columns:1.05fr 1fr;gap:0 32px}"
+        "@media(max-width:720px){.grid{grid-template-columns:1fr;gap:0}}"
+        ".jh{margin:0 0 8px;font-size:1rem;color:#7a2e12;font-weight:600}"
         ".facts{display:flex;flex-wrap:wrap;gap:8px 18px;padding:11px 14px;background:#fbf3ea;border:1px solid #ece0d2;border-radius:10px;margin:0 0 14px;font-size:.92rem}"
         ".facts a{color:#b5541f;text-decoration:none}"
         ".lede{margin:0 0 16px;line-height:1.6}"
         ".cta{margin:0 0 4px}"
         ".btn{background:#b5541f;color:#fff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:8px;font-size:.92rem;display:inline-block}"
-        ".sec{border-top:1px solid #ece3d8;padding-top:12px;margin-top:14px}"
+        ".sec{margin-top:16px}"
         ".sec h3{margin:0 0 7px;font-size:1rem;color:#7a2e12}"
         ".sec p{margin:0;line-height:1.55}"
         ".jr{margin:0 0 9px;font-size:.9rem;line-height:1.45}"
         ".jr .jd{font-weight:700;color:#5b4a3d}"
-        ".foot{margin:16px 0 0;font-size:.78rem;color:#9a8a7a}"
+        ".foot{margin:18px 0 0;font-size:.78rem;color:#9a8a7a}"
     )
     return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
@@ -1750,17 +1753,29 @@ def render_national_html(cluster):
                f'shows last year: {entered}. The National typically draws more from across the country.'
                f'</p></div>') if clcy else ""
 
-    inner = f'''<div class="bd">
-  <div class="facts">
-    <span>\U0001f4c5 <b>{_h(cluster["dates"])}</b></span>
-    <span>\U0001f4cd <a href="{maps}" target="_blank" rel="noopener">{_h(cluster["venue"] or cluster["where"])}</a></span>
-    <span>\U0001f3c6 {cluster["n"]} AKC shows this weekend</span>
+    inner = f'''<div class="hdr">
+  <div class="lbl">FSCA National Specialty</div>
+  <div class="ttl">{year} National Specialty</div>
+  <div class="sub">{_h(cluster["dates"])} · {_h(cluster["where"])}</div>
+</div>
+<div class="bd">
+  <div class="grid">
+    <div>
+      <div class="facts">
+        <span>\U0001f4c5 <b>{_h(cluster["dates"])}</b></span>
+        <span>\U0001f4cd <a href="{maps}" target="_blank" rel="noopener">{_h(cluster["venue"] or cluster["where"])}</a></span>
+        <span>\U0001f3c6 {cluster["n"]} AKC shows this weekend</span>
+      </div>
+      <p class="lede">The club’s premier event of the year — the one weekend the breed community gathers from across the country.</p>
+      <div class="cta"><a class="btn" href="{gcal}" target="_blank" rel="noopener">＋ Add to your calendar</a></div>
+      <div class="sec"><h3>Entries &amp; premium</h3><p>{entline}</p></div>
+      {turnout}
+    </div>
+    <div>
+      <div class="jh">Judges</div>
+      {judges}
+    </div>
   </div>
-  <p class="lede">The club’s premier event of the year — the one weekend the breed community gathers from across the country.</p>
-  <div class="cta"><a class="btn" href="{gcal}" target="_blank" rel="noopener">＋ Add to your calendar</a></div>
-  <div class="sec"><h3>Entries &amp; premium</h3><p>{entline}</p></div>
-  <div class="sec"><h3>Judges</h3>{judges}</div>
-  {turnout}
   <p class="foot">Auto-updated from the AKC event feed — confirm final details on the premium list.</p>
 </div>'''
     return _natl_shell(inner)
