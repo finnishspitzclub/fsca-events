@@ -1314,8 +1314,9 @@ def render_map_html(events, title, subtitle):
   .calwk{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid #e5e7eb}
   .calday{min-height:86px;border-left:1px solid #eef0f2;padding:2px 3px}
   .calday:first-child{border-left:0}
-  .calday.oth{background:#fafafa}
-  .calday .dn{font-size:11px;color:#889;font-weight:600;display:inline-block;min-width:17px;text-align:center}
+  .calday.oth{background:#e9edf1}
+  .calday.oth .dn{color:#b2bcc7;font-weight:500}
+  .calday .dn{font-size:11px;color:#556;font-weight:700;display:inline-block;min-width:17px;text-align:center}
   .calday.today .dn{background:#b5541f;color:#fff;border-radius:8px}
   .calbar{position:absolute;height:15px;line-height:15px;border-radius:3px;color:#fff;font-size:11px;padding:0 5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;border:0;box-sizing:border-box}
   .calbar.sel{outline:2px solid #0f2b46;outline-offset:-1px;z-index:2}
