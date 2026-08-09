@@ -1031,6 +1031,26 @@ def _gcal_session(token):
     return s
 
 
+def _gcal_write(s, method, url, data=None, tries=6):
+    """One Calendar API write with backoff on rate-limit / transient errors.
+
+    A big first sync fires ~1800 writes; Google will intermittently answer 403
+    userRateLimitExceeded or 429. Without this a single such reply would abort
+    the whole run. Returns the final Response for the caller to inspect."""
+    delay = 1.0
+    r = None
+    for attempt in range(tries):
+        r = s.request(method, url, data=data, timeout=60)
+        transient = r.status_code in (429, 500, 502, 503, 504) or (
+            r.status_code == 403 and "ratelimit" in r.text.lower())
+        if not transient or attempt == tries - 1:
+            return r
+        ra = r.headers.get("Retry-After")
+        time.sleep(float(ra) if (ra and ra.isdigit()) else delay)
+        delay = min(delay * 2, 60)
+    return r
+
+
 def _gcal_list_ours(s, cal):
     """All events on `cal` that carry our marker property."""
     out, page = {}, None
@@ -1078,21 +1098,23 @@ def cmd_gcal(args):
     ins, upd, same, dele = reconcile(desired, existing)
 
     for eid, body in ins:
-        r = s.post(f"{GCAL_API}/calendars/{cal}/events", data=json.dumps(dict(body, id=eid)),
-                   timeout=60)
+        r = _gcal_write(s, "POST", f"{GCAL_API}/calendars/{cal}/events",
+                        data=json.dumps(dict(body, id=eid)))
         if r.status_code == 409:   # id exists (e.g. previously soft-deleted) -> update
-            r = s.put(f"{GCAL_API}/calendars/{cal}/events/{eid}", data=json.dumps(body), timeout=60)
+            r = _gcal_write(s, "PUT", f"{GCAL_API}/calendars/{cal}/events/{eid}",
+                            data=json.dumps(body))
         r.raise_for_status()
         time.sleep(0.1)
     for eid, body in upd:
-        r = s.put(f"{GCAL_API}/calendars/{cal}/events/{eid}", data=json.dumps(body), timeout=60)
+        r = _gcal_write(s, "PUT", f"{GCAL_API}/calendars/{cal}/events/{eid}",
+                        data=json.dumps(body))
         r.raise_for_status()
         time.sleep(0.1)
 
     pruned = 0
     if not args.no_prune:
         for eid in dele:
-            r = s.delete(f"{GCAL_API}/calendars/{cal}/events/{eid}", timeout=60)
+            r = _gcal_write(s, "DELETE", f"{GCAL_API}/calendars/{cal}/events/{eid}")
             if r.status_code in (200, 204, 410):
                 pruned += 1
             time.sleep(0.1)
