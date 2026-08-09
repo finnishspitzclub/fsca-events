@@ -1273,6 +1273,13 @@ def _make_cluster(c):
     shows = [{k: v for k, v in m.items()
               if not k.startswith("_") and k not in ("site", "sd", "ed")}
              for m in members]
+    # Best-attended day's Finnish Spitz turnout from last year (max total across
+    # the site's shows), for an at-a-glance "is this one worth it" signal.
+    fs_last, fs_last_tip = None, ""
+    for m in members:
+        mm = re.match(r"\s*(\d+)", str(m["clcy"] or ""))
+        if mm and (fs_last is None or int(mm.group(1)) > fs_last):
+            fs_last, fs_last_tip = int(mm.group(1)), _clcy_tip(m["clcy"])
     return {
         "start": minstart.isoformat(), "end": maxend.isoformat(), "dates": dates,
         "tz": tz, "tzLabel": TZ_LABEL.get(tz, "—"), "color": _hex_for(m0["_state"]),
@@ -1283,6 +1290,7 @@ def _make_cluster(c):
         "high_value": any(m["high_value"] for m in members),
         "pended": any(m["pended"] for m in members),
         "close": closes[0] if closes else "",
+        "fs_last": fs_last, "fs_last_tip": fs_last_tip,
         "event_no": m0["event_no"],
         "shows": shows,
     }
@@ -1318,7 +1326,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .ph{font-size:.9rem;font-weight:600;color:#0f2b46;margin:0 0 6px}
   .ph .phn{font-weight:400;color:#8a8f98;font-size:.8rem}
   .ph2{padding:8px 14px 0}
-  #map{height:404px;border:1px solid #e5e7eb;border-radius:8px}
+  #map{height:569px;border:1px solid #e5e7eb;border-radius:8px}
   .calnav{display:flex;align-items:center;gap:8px;margin:0 0 6px}
   .calnav button{font:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;padding:3px 10px;line-height:1.2}
   .calnav .ml{font-weight:600;font-size:.9rem;min-width:122px;text-align:center}
@@ -1349,7 +1357,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .filters input[type=search]{flex:1 1 180px;min-width:130px}
   .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
   .filters .count{margin-left:auto;font-size:.8rem;color:#555;white-space:nowrap}
-  .tablewrap{overflow:auto;max-height:860px;margin:6px 14px 14px;border:1px solid #e5e7eb;border-radius:8px}
+  .tablewrap{overflow:auto;max-height:826px;margin:6px 14px 14px;border:1px solid #e5e7eb;border-radius:8px}
   table{border-collapse:collapse;width:100%;font-size:.82rem}
   thead th{position:sticky;top:0;background:#0f2b46;color:#fff;text-align:left;padding:7px 10px;font-weight:600;white-space:nowrap}
   td{padding:6px 10px;border-bottom:1px solid #eee;vertical-align:top}
@@ -1365,7 +1373,8 @@ def render_map_html(events, title, subtitle, national_no=""):
   tbody tr{cursor:pointer}
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
-  #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:860px}
+  .fsnone{color:#c2c8d0}
+  #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:826px}
   .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
   .calbar.oth{opacity:.42}
@@ -1418,7 +1427,7 @@ def render_map_html(events, title, subtitle, national_no=""):
     <table>
       <thead><tr>
         <th>Dates</th><th>Show(s)</th><th>Location</th><th>Zone</th>
-        <th>Entries close</th><th></th>
+        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -1491,6 +1500,7 @@ function render(refit){
       '<td>'+name+tags+'</td>'+
       '<td style="white-space:nowrap">'+esc(loc)+'</td>'+
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
+      '<td style="text-align:center;white-space:nowrap"'+(c.fs_last_tip?' title="'+esc(c.fs_last_tip)+'"':'')+'>'+(c.fs_last!=null?'<b>'+c.fs_last+'</b>':'<span class="fsnone">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+esc(c.close)+'</td>'+
       '<td class="chev">&rsaquo;</td></tr>';
   }).join('');
