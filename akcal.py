@@ -1300,7 +1300,7 @@ def render_map_html(events, title, subtitle):
   header h1{margin:0;font-size:1.05rem}
   header p{margin:2px 0 0;font-size:.8rem;opacity:.85}
   .views{display:flex;flex-wrap:wrap;gap:14px;padding:12px 14px 4px}
-  .vpane{flex:1 1 440px;min-width:300px;display:flex;flex-direction:column}
+  .vpane{flex:1 1 360px;min-width:270px;display:flex;flex-direction:column}
   .ph{font-size:.9rem;font-weight:600;color:#0f2b46;margin:0 0 6px}
   .ph .phn{font-weight:400;color:#8a8f98;font-size:.8rem}
   .ph2{padding:8px 14px 0}
