@@ -1349,11 +1349,14 @@ def render_map_html(events, title, subtitle, national_no=""):
   .filters input[type=search]{flex:1 1 180px;min-width:130px}
   .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
   .filters .count{margin-left:auto;font-size:.8rem;color:#555;white-space:nowrap}
-  .tablewrap{overflow:auto;max-height:440px;margin:6px 14px 14px;border:1px solid #e5e7eb;border-radius:8px}
+  .tablewrap{overflow:auto;max-height:860px;margin:6px 14px 14px;border:1px solid #e5e7eb;border-radius:8px}
   table{border-collapse:collapse;width:100%;font-size:.82rem}
   thead th{position:sticky;top:0;background:#0f2b46;color:#fff;text-align:left;padding:7px 10px;font-weight:600;white-space:nowrap}
   td{padding:6px 10px;border-bottom:1px solid #eee;vertical-align:top}
   tbody tr:hover{background:#f7fafc}
+  tbody tr{transition:background-color .15s ease,box-shadow .15s ease}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+  .fade{animation:fadein .18s ease}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid #0003;margin-right:5px;vertical-align:middle}
   .tag{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 5px;border-radius:8px}
   .pend{background:#ffe0b2;color:#8a4b00} .hv{background:#ffcdd2;color:#8a0000}
@@ -1362,7 +1365,9 @@ def render_map_html(events, title, subtitle, national_no=""):
   tbody tr{cursor:pointer}
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
-  #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:440px}
+  #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:860px}
+  .calbar{transition:filter .12s ease,box-shadow .12s ease}
+  .calbar.sel{filter:brightness(1.08)}
   #detail .dhead{position:sticky;top:0;background:#0f2b46;color:#fff;padding:11px 14px;display:flex;align-items:flex-start;gap:10px;z-index:1}
   #detail .dhead h2{margin:0;font-size:1rem;flex:1;line-height:1.3}
   #detail .dhead .sub{font-size:.78rem;opacity:.85;font-weight:400}
@@ -1371,11 +1376,11 @@ def render_map_html(events, title, subtitle, national_no=""):
   .csum{font-size:.85rem;color:#333;margin:0 0 4px}
   .clkey{font-size:.76rem;color:#5a6572;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:8px;padding:8px 11px;margin:14px 0 0;line-height:1.5}
   .csum a{color:#0b5cad}
-  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:11px 13px;margin:12px 0}
-  .showcard h3{margin:0 0 6px;font-size:.98rem}
-  .showcard .meta{font-size:.83rem;line-height:1.55;color:#333}
+  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0}
+  .showcard h3{margin:0 0 4px;font-size:.96rem}
+  .showcard .meta{font-size:.83rem;line-height:1.45;color:#333}
   .showcard .meta b{color:#111}
-  .addcal{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .addcal{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap}
   .addcal a,.addcal button{font:inherit;font-size:.78rem;text-decoration:none;border:1px solid #0b5cad;color:#0b5cad;background:#fff;padding:5px 10px;border-radius:6px;cursor:pointer}
   .addcal .ics{border-color:#666;color:#666}
 </style>
@@ -1528,7 +1533,9 @@ function renderCal(){
     for(const d in ov)bh+='<span class="cmore" style="position:absolute;left:calc('+(d/7*100).toFixed(3)+'% + 3px);top:'+(20+MAXL*17)+'px">+'+ov[d]+'</span>';
     h+='<div class="calwk">'+cells+bh+'</div>';
   }
+  const mk=y+'-'+m;
   calGrid.innerHTML=h;
+  if(calGrid._mk!==mk){calGrid.classList.remove('fade');void calGrid.offsetWidth;calGrid.classList.add('fade');calGrid._mk=mk;}
 }
 function renderAll(refit){render(refit);renderCal();}
 function highlight(ai){
@@ -1606,12 +1613,13 @@ function openDetail(c){
   detailEl.innerHTML=html;
   tableWrap.style.display='none';
   detailEl.style.display='block';
+  detailEl.classList.remove('fade');void detailEl.offsetWidth;detailEl.classList.add('fade');
   detailEl.setAttribute('aria-hidden','false');
   detailEl.scrollTop=0;
   detailEl.scrollIntoView({block:'nearest'});
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
-function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
+function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
 [fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
 q.addEventListener('input',()=>renderAll(false));
@@ -1658,8 +1666,8 @@ def cmd_map(args):
     shows = sum(c["n"] for c in clusters)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
     title = "Finnish Spitz — AKC Events"
-    subtitle = (f"{shows} shows at {len(clusters)} sites · choose a window & "
-                f"filters below · updated {updated}")
+    subtitle = (f"{shows} shows at {len(clusters)} sites · filter & click any show below · "
+                f"tap the ★ button for the National Specialty · updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
     out.write_text(render_map_html(clusters, title, subtitle, NATIONAL_EVENT_NO), encoding="utf-8")
     print(f"wrote {out}  ({len(clusters)} clusters / {shows} shows)")
