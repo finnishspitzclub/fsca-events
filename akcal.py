@@ -1476,8 +1476,8 @@ function renderCal(){
   if(!calMonth){const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);}
   const y=calMonth.getFullYear(),m=calMonth.getMonth();
   calLabel.textContent=calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
-  const lead=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();
-  const weeks=Math.ceil((lead+dim)/7);
+  const lead=new Date(y,m,1).getDay();
+  const weeks=6;  // always 6 rows so the grid height is constant month-to-month (no layout jump)
   const gridStart=new Date(y,m,1-lead);
   const gEnd=new Date(gridStart);gEnd.setDate(gEnd.getDate()+weeks*7-1);
   const now=new Date(),tkey=now.getFullYear()+'-'+now.getMonth()+'-'+now.getDate();
