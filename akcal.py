@@ -1330,7 +1330,6 @@ def render_map_html(events, title, subtitle):
   .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000}
   .pop a{color:#0b5cad}
   .filters{padding:11px 14px;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #d3dbe4;border-bottom:1px solid #d3dbe4;background:#e7edf3}
-  .filters .flabel{font-size:.82rem;font-weight:700;color:#0f2b46;margin-right:2px}
   .filters input[type=search],.filters select{font:inherit;font-size:.85rem;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
   .filters input[type=search]{flex:1 1 180px;min-width:130px}
   .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
@@ -1379,7 +1378,6 @@ def render_map_html(events, title, subtitle):
     </section>
   </div>
   <div class="filters">
-    <span class="flabel">Filter all three views:</span>
     <input type="search" id="q" placeholder="Search club, city, venue…">
     <select id="fState"><option value="">All states</option></select>
     <select id="fTz"><option value="">All timezones</option></select>
