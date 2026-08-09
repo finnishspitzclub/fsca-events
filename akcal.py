@@ -1178,6 +1178,17 @@ def _month_bounds(today, months=1):
     return first, date(y, m, 1) - timedelta(days=1)
 
 
+def _span_label(sd, ed):
+    """Human date/date-range with weekday, e.g. 'Wed Aug 5 - Sun Aug 9, 2026'."""
+    def one(d):
+        return d.strftime("%a %b ") + str(d.day)
+    if sd == ed:
+        return f"{one(sd)}, {sd.year}"
+    if sd.year != ed.year:
+        return f"{one(sd)}, {sd.year} – {one(ed)}, {ed.year}"
+    return f"{one(sd)} – {one(ed)}, {ed.year}"
+
+
 def cluster_events(rows):
     """Group AKC shows into site clusters for the map and list.
 
@@ -1203,7 +1214,7 @@ def cluster_events(rows):
         shows.append({
             "site": site, "sd": sd, "ed": ed,
             "start": sd.isoformat(), "end": ed.isoformat(),
-            "dates": sd.isoformat() if sd == ed else f"{sd.isoformat()} – {ed.isoformat()}",
+            "dates": _span_label(sd, ed),
             "club": r["club"] or "Unknown club",
             "event_no": r["event_no"],
             "comp_type": r["comp_type"] or "",
@@ -1220,6 +1231,7 @@ def cluster_events(rows):
             "group_judge": _col(r, "group_judge") or "",
             "bis_judge": _col(r, "bis_judge") or "",
             "clcy": _col(r, "completed_last_year") or "",
+            "clcy_tip": _clcy_tip(_col(r, "completed_last_year") or ""),
             "_venue": r["venue"] or "", "_city": r["city"] or "",
             "_state": r["state"] or "", "_lat": lat, "_lon": lon,
         })
@@ -1256,8 +1268,7 @@ def _make_cluster(c):
     tz = _tz(m0["_state"])
     clubs = list(dict.fromkeys(m["club"] for m in members))
     label = clubs[0] if len(clubs) == 1 else (m0["_venue"] or m0["_city"] or "Show cluster")
-    dates = minstart.isoformat() if minstart == maxend \
-        else f"{minstart.isoformat()} – {maxend.isoformat()}"
+    dates = _span_label(minstart, maxend)
     closes = sorted(m["close"] for m in members if m["close"])
     shows = [{k: v for k, v in m.items()
               if not k.startswith("_") and k not in ("site", "sd", "ed")}
@@ -1355,6 +1366,7 @@ def render_map_html(events, title, subtitle):
   #detail .back{background:rgba(255,255,255,.16);border:0;color:#fff;font:inherit;font-size:.85rem;padding:6px 11px;border-radius:6px;cursor:pointer;flex:none}
   #detail .body{padding:12px 14px 30px}
   .csum{font-size:.85rem;color:#333;margin:0 0 4px}
+  .clkey{font-size:.76rem;color:#5a6572;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:8px;padding:8px 11px;margin:14px 0 0;line-height:1.5}
   .csum a{color:#0b5cad}
   .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:11px 13px;margin:12px 0}
   .showcard h3{margin:0 0 6px;font-size:.98rem}
@@ -1410,6 +1422,7 @@ const ALL = __DATA__;
 const AKC='https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number=';
 const MAPS='https://www.google.com/maps/search/?api=1&query=';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmtFee(v){const f=parseFloat(v);return isNaN(f)?esc(v):'$'+f.toFixed(2).replace(/\.00$/,'');}
 function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 function ymd(s){return String(s).replace(/-/g,'');}
 function plusDay(s){const d=pd(s);d.setDate(d.getDate()+1);return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
@@ -1562,11 +1575,11 @@ function showCard(s,i){
   else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
   if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
   if(j.length)m.push('Judges — '+j.join(' · '));
-  if(s.fee)m.push('<b>Entry fee:</b> '+esc(s.fee));
+  if(s.fee)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
   if(s.open||s.close)m.push('<b>Entries:</b> '+(s.open?('open '+esc(s.open)):'')+(s.open&&s.close?' · ':'')+(s.close?('close '+esc(s.close)):''));
   if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
   if(s.online)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
-  if(s.clcy)m.push('<b>Finnish Spitz last year:</b> '+esc(s.clcy));
+  if(s.clcy)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
   return '<div class="showcard"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
@@ -1583,7 +1596,9 @@ function openDetail(c){
   let html='<div class="dhead"><button class="back" id="dback">‹ Back</button>'+
     '<h2>'+(c.high_value?'★ ':'')+esc(c.n>1?(c.venue||c.label):c.label)+'<br><span class="sub">'+esc(c.dates)+' · '+esc(c.tzLabel)+' time</span></h2></div>'+
     '<div class="body"><p class="csum">'+(mapLink?('📍 '+mapLink+' · '):'')+c.n+' show'+(c.n===1?'':'s')+' at this site</p>'+
-    c.shows.map((s,i)=>showCard(s,i)).join('')+'</div>';
+    c.shows.map((s,i)=>showCard(s,i)).join('')+
+    (c.shows.some(s=>s.clcy)?'<p class="clkey"><b>Reading the Finnish Spitz count:</b> total – class dogs – class bitches (champion dogs – champion bitches) veterans. Hover the number for the plain-English breakdown.</p>':'')+
+    '</div>';
   detailEl.innerHTML=html;
   tableWrap.style.display='none';
   detailEl.style.display='block';
