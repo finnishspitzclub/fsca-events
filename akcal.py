@@ -35,6 +35,7 @@ import time
 import hashlib
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     import requests
@@ -50,6 +51,13 @@ UA = f"akcal/1.0 (personal dog-show calendar; {CONTACT})"
 DB_PATH = Path(__file__).with_name("events.db")
 ICS_PATH = Path(__file__).with_name("akc-events.ics")
 MAP_PATH = Path(__file__).with_name("events-map.html")
+NATIONAL_PATH = Path(__file__).with_name("national-card.html")
+
+# The FSCA National Specialty has no distinct row in the AKC feed - it's held in
+# conjunction with a cluster. Point this at the anchor event (e.g. the breed/group
+# specialty that weekend); the card auto-fills from whichever cluster it lands in.
+# One value to update per year. Overridable via the workflow env.
+NATIONAL_EVENT_NO = os.environ.get("AKCAL_NATIONAL_EVENT", "2026746503")
 
 REQUEST_DELAY = 2.0                  # seconds between calls
 POST_TIMEOUT = 90                    # server took 26s for a 1yr CO query; 30 is too tight
@@ -1144,6 +1152,8 @@ def cmd_sync(args):
     if not args.dry_run:
         print("== regenerate map ==")
         cmd_map(argparse.Namespace(month=None, months=1, out=None))
+        print("== national specialty card ==")
+        cmd_national(argparse.Namespace(event=None, out=None))
 
 
 # ---------------------------------------------------------------- map
@@ -1532,6 +1542,138 @@ def cmd_map(args):
     print(f"wrote {out}  ({len(clusters)} clusters / {shows} shows)")
 
 
+# ---------------------------------------------------------------- national card
+#
+# The FSCA National Specialty as a self-contained card, built entirely from the
+# feed cluster that NATIONAL_EVENT_NO lands in and embedded on /events as an
+# iframe. Regenerated every sync run, so it stays current with one config value
+# per year. AKC gives us judges but not the ring-schedule "judging program"
+# (a superintendent doc), so this shows judges, not a program.
+
+
+def _natl_gcal(text, start, end, loc, details):
+    """Google Calendar 'add event' template URL for an all-day span."""
+    d1 = (_parse_date(end) or _parse_date(start))
+    end_excl = (d1 + timedelta(days=1)).strftime("%Y%m%d")
+    return ("https://calendar.google.com/calendar/render?action=TEMPLATE"
+            f"&text={quote(text)}&dates={start.replace('-', '')}/{end_excl}"
+            f"&location={quote(loc)}&details={quote(details)}")
+
+
+def _natl_shell(inner):
+    css = (
+        "html,body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#4a3f36;background:#fff}"
+        ".card{max-width:760px;margin:0 auto;border:1px solid #e7ddd4;border-radius:14px;overflow:hidden}"
+        ".hdr{background:#7a2e12;color:#fff;padding:16px 18px}"
+        ".hdr .lbl{font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:#f0c9b5;font-weight:700}"
+        ".hdr .ttl{font-size:1.4rem;font-weight:800;margin-top:3px;line-height:1.15}"
+        ".hdr .sub{color:#f3d9c9;margin-top:2px;font-size:.95rem}"
+        ".bd{padding:16px 18px}"
+        ".facts{display:flex;flex-wrap:wrap;gap:8px 18px;padding:11px 14px;background:#fbf3ea;border:1px solid #ece0d2;border-radius:10px;margin:0 0 14px;font-size:.92rem}"
+        ".facts a{color:#b5541f;text-decoration:none}"
+        ".lede{margin:0 0 16px;line-height:1.6}"
+        ".cta{margin:0 0 4px}"
+        ".btn{background:#b5541f;color:#fff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:8px;font-size:.92rem;display:inline-block}"
+        ".sec{border-top:1px solid #ece3d8;padding-top:12px;margin-top:14px}"
+        ".sec h3{margin:0 0 7px;font-size:1rem;color:#7a2e12}"
+        ".sec p{margin:0;line-height:1.55}"
+        ".jr{margin:0 0 9px;font-size:.9rem;line-height:1.45}"
+        ".jr .jd{font-weight:700;color:#5b4a3d}"
+        ".foot{margin:16px 0 0;font-size:.78rem;color:#9a8a7a}"
+    )
+    return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            '<title>FSCA National Specialty</title>\n<style>' + css + '</style>\n</head>\n'
+            '<body>\n<div class="card">\n' + inner + '\n</div>\n</body>\n</html>\n')
+
+
+def render_national_html(cluster):
+    """Self-contained National Specialty card from a feed cluster (or a graceful
+    placeholder when the anchor isn't in the store)."""
+    if not cluster:
+        return _natl_shell(
+            '<div class="hdr"><div class="lbl">FSCA National Specialty</div>'
+            '<div class="ttl">Details coming soon</div></div>'
+            '<div class="bd"><p>This year’s National Specialty will appear here once '
+            'the show is posted to the AKC event calendar.</p></div>')
+
+    year = cluster["start"][:4]
+    where = ", ".join(x for x in (cluster["venue"], cluster["where"]) if x)
+    maps = "https://www.google.com/maps/search/?api=1&query=" + quote(where or cluster["where"])
+    supt = next((s["superint"] for s in cluster["shows"] if s["superint"]), "")
+    fees = sorted({float(s["fee"]) for s in cluster["shows"] if str(s["fee"]) not in ("", "None")})
+    feetxt = (f"${fees[0]:.0f}" if len(fees) == 1
+              else f"${fees[0]:.0f}–${fees[-1]:.0f}") if fees else ""
+    closes = sorted({s["close"] for s in cluster["shows"] if s["close"]})
+    closetxt = closes[0] if closes else ""
+    clcy = next((s["clcy"] for s in cluster["shows"] if s["clcy"]), "")
+    gcal = _natl_gcal(
+        f"{year} FSCA National Specialty", cluster["start"], cluster["end"], where,
+        f"FSCA National Specialty weekend ({cluster['n']} AKC shows). "
+        f"Premium & entries via {supt or 'the superintendent'}. Confirm on the premium list.")
+
+    jr = []
+    for s in cluster["shows"]:
+        parts = []
+        if s["breed_judge"]:
+            parts.append("<b>Breed:</b> " + _h(s["breed_judge"]))
+        if s["group_judge"] and s["group_judge"] != s["breed_judge"]:
+            parts.append("<b>Group:</b> " + _h(s["group_judge"]))
+        if s["bis_judge"]:
+            parts.append("<b>BIS:</b> " + _h(s["bis_judge"]))
+        if parts:
+            jr.append(f'<div class="jr"><div class="jd">{_h(s["dates"])} · {_h(s["club"])}</div>'
+                      f'<div>{" · ".join(parts)}</div></div>')
+    judges = "".join(jr) or "<p>Judge assignments post as the show approaches.</p>"
+
+    ent = []
+    if supt:
+        ent.append(f"Superintendent: <b>{_h(supt)}</b>")
+    if feetxt:
+        ent.append(f"Entry fee {feetxt}")
+    if closetxt:
+        ent.append(f"Entries close <b>{_h(closetxt)}</b>")
+    entline = (" · ".join(ent) + ". " if ent else "") + "<em>Confirm on the premium list.</em>"
+
+    turnout = (f'<div class="sec"><h3>Finnish Spitz turnout</h3><p>The breed’s biggest annual '
+               f'gathering. Entered here last year: <b>{_h(clcy)}</b>.</p></div>') if clcy else ""
+
+    inner = f'''<div class="hdr">
+  <div class="lbl">FSCA National Specialty</div>
+  <div class="ttl">{year} National Specialty</div>
+  <div class="sub">{_h(cluster["dates"])} · {_h(cluster["where"])}</div>
+</div>
+<div class="bd">
+  <div class="facts">
+    <span>\U0001f4c5 <b>{_h(cluster["dates"])}</b></span>
+    <span>\U0001f4cd <a href="{maps}" target="_blank" rel="noopener">{_h(cluster["venue"] or cluster["where"])}</a></span>
+    <span>\U0001f3c6 {cluster["n"]} AKC shows this weekend</span>
+  </div>
+  <p class="lede">The club’s premier event of the year — the one weekend the breed community gathers from across the country.</p>
+  <div class="cta"><a class="btn" href="{gcal}" target="_blank" rel="noopener">＋ Add to your calendar</a></div>
+  <div class="sec"><h3>Entries &amp; premium</h3><p>{entline}</p></div>
+  <div class="sec"><h3>Judges</h3>{judges}</div>
+  {turnout}
+  <p class="foot">Auto-updated from the AKC event feed — confirm final details on the premium list.</p>
+</div>'''
+    return _natl_shell(inner)
+
+
+def cmd_national(args):
+    conn = db()
+    rows = conn.execute("SELECT * FROM events ORDER BY start_date").fetchall()
+    conn.close()
+    anchor = getattr(args, "event", None) or NATIONAL_EVENT_NO
+    target = next((c for c in cluster_events(rows)
+                   if any(s["event_no"] == anchor for s in c["shows"])), None)
+    out = Path(args.out) if getattr(args, "out", None) else NATIONAL_PATH
+    out.write_text(render_national_html(target), encoding="utf-8")
+    if target:
+        print(f"wrote {out}  (national: {target['dates']} {target['where']}, {target['n']} shows)")
+    else:
+        print(f"wrote {out}  (anchor {anchor} not in store - placeholder)")
+
+
 # ---------------------------------------------------------------- cli
 
 
@@ -1570,6 +1712,10 @@ def main():
     mp.add_argument("--months", type=int, default=1, help="number of months to include (default 1)")
     mp.add_argument("--out", help=f"output path (default {MAP_PATH.name})")
 
+    n = sub.add_parser("national", help="render the National Specialty card (feed-driven)")
+    n.add_argument("--event", help=f"anchor event number (default {NATIONAL_EVENT_NO})")
+    n.add_argument("--out", help=f"output path (default {NATIONAL_PATH.name})")
+
     sy = sub.add_parser("sync", help="fetch a rolling window then push to Google Calendar")
     sy.add_argument("--state", action="append", metavar="XX",
                     help=f"state to query; repeatable. default: {FETCH_STATES}")
@@ -1584,7 +1730,8 @@ def main():
 
     args = p.parse_args()
     {"probe": cmd_probe, "fetch": cmd_fetch, "ics": cmd_ics, "show": cmd_show,
-     "gcal": cmd_gcal, "sync": cmd_sync, "map": cmd_map}[args.cmd](args)
+     "gcal": cmd_gcal, "sync": cmd_sync, "map": cmd_map,
+     "national": cmd_national}[args.cmd](args)
 
 
 if __name__ == "__main__":

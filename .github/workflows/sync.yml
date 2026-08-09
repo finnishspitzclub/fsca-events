@@ -52,6 +52,7 @@ jobs:
         run: |
           mkdir -p site
           cp events-map.html site/index.html
+          cp national-card.html site/national.html
 
       - uses: actions/configure-pages@v5
 

@@ -9,6 +9,7 @@ fsca-calendar-sync-*.json
 # Generated artifacts (rebuilt every run; the store is stateless in CI)
 events.db
 events-map.html
+national-card.html
 akc-events.ics
 site/
 sync.log
