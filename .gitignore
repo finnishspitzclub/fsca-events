@@ -1,0 +1,18 @@
+# Secrets - NEVER commit these
+service-account.json
+# Google service-account keys in any form (project-hash.json, etc.)
+*service-account*.json
+*.iam.gserviceaccount.com.json
+fsca-calendar-sync-*.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
+
+# Generated artifacts (rebuilt every run; the store is stateless in CI)
+events.db
+events-map.html
+akc-events.ics
+site/
+sync.log
+
+# Python
+__pycache__/
+*.pyc

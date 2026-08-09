@@ -1,0 +1,63 @@
+name: akcal sync
+
+# Twice a day (UTC; ~7am/7pm Mountain). Timing isn't critical - this just keeps
+# the calendar and map current. Also runnable on demand from the Actions tab.
+on:
+  schedule:
+    - cron: "0 13,1 * * *"
+  workflow_dispatch: {}
+
+# No two runs at once (a long fetch shouldn't overlap the next tick).
+concurrency:
+  group: akcal-sync
+  cancel-in-progress: false
+
+# Needed for the GitHub Pages deploy of the map.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Write service-account key
+        # The whole service-account JSON, stored as the repo secret GCAL_KEY_JSON,
+        # written to a file the ephemeral runner discards when the job ends.
+        run: printf '%s' "$GCAL_KEY_JSON" > service-account.json
+        env:
+          GCAL_KEY_JSON: ${{ secrets.GCAL_KEY_JSON }}
+
+      - name: Fetch nationally, push calendar, build map
+        env:
+          # The club-owned "FSCA Shows & Events" calendar (public; not secret).
+          AKCAL_GCAL_CALENDAR_ID: c6b2847755e3ed273aee058e3479ba5640e88c8b407e868ee80b4057daee7be4@group.calendar.google.com
+          AKCAL_GCAL_KEY: service-account.json
+        run: python akcal.py sync
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p site
+          cp events-map.html site/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - uses: actions/deploy-pages@v4
+        id: deployment
