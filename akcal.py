@@ -1366,8 +1366,10 @@ def render_map_html(events, title, subtitle, national_no=""):
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
   #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:860px}
-  .calbar{transition:filter .12s ease,box-shadow .12s ease}
+  .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
+  .calbar.oth{opacity:.42}
+  .calbar.oth.sel{opacity:1}
   #detail .dhead{position:sticky;top:0;background:#0f2b46;color:#fff;padding:11px 14px;display:flex;align-items:flex-start;gap:10px;z-index:1}
   #detail .dhead h2{margin:0;font-size:1rem;flex:1;line-height:1.3}
   #detail .dhead .sub{font-size:.78rem;opacity:.85;font-weight:400}
@@ -1519,7 +1521,9 @@ function renderCal(){
     items.forEach(c=>{
       const s=Math.max(gidx(pd(c.start)),wStart),e=Math.min(gidx(pd(c.end)),wEnd);
       if(s>e)return;
-      bars.push({c,s:s-wStart,e:e-wStart,cont:gidx(pd(c.start))<wStart});
+      let cur=false;
+      for(let gi=s;gi<=e;gi++){const dd=new Date(gridStart);dd.setDate(gridStart.getDate()+gi);if(dd.getMonth()===m){cur=true;break;}}
+      bars.push({c,s:s-wStart,e:e-wStart,cont:gidx(pd(c.start))<wStart,oth:!cur});
     });
     bars.sort((a,b)=>a.s-b.s||b.e-a.e);
     const laneEnd=[];
@@ -1528,7 +1532,7 @@ function renderCal(){
     bars.forEach(b=>{
       if(b.lane>=MAXL){for(let d=b.s;d<=b.e;d++)ov[d]=(ov[d]||0)+1;return;}
       const left=(b.s/7*100),width=((b.e-b.s+1)/7*100);
-      bh+='<button class="calbar" data-ai="'+AIDX.get(b.c)+'" title="'+esc(b.c.label)+' — '+esc(b.c.dates)+'" style="left:calc('+left.toFixed(3)+'% + 2px);width:calc('+width.toFixed(3)+'% - 4px);top:'+(20+b.lane*17)+'px;background:'+esc(b.c.color)+'">'+(b.c.high_value?'★ ':'')+(b.cont?'‹ ':'')+esc(b.c.label)+'</button>';
+      bh+='<button class="calbar'+(b.oth?' oth':'')+'" data-ai="'+AIDX.get(b.c)+'" title="'+esc(b.c.label)+' — '+esc(b.c.dates)+'" style="left:calc('+left.toFixed(3)+'% + 2px);width:calc('+width.toFixed(3)+'% - 4px);top:'+(20+b.lane*17)+'px;background:'+esc(b.c.color)+'">'+(b.c.high_value?'★ ':'')+(b.cont?'‹ ':'')+esc(b.c.label)+'</button>';
     });
     for(const d in ov)bh+='<span class="cmore" style="position:absolute;left:calc('+(d/7*100).toFixed(3)+'% + 3px);top:'+(20+MAXL*17)+'px">+'+ov[d]+'</span>';
     h+='<div class="calwk">'+cells+bh+'</div>';
