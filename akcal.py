@@ -1470,8 +1470,8 @@ function showCard(s,i){
   const m=[];
   m.push('<b>'+esc(s.dates)+'</b>'+(s.comp_type?' · '+esc(s.comp_type):''));
   const j=[];
-  if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));
-  if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));
+  if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed & Group:</b> '+esc(s.breed_judge));}
+  else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
   if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
   if(j.length)m.push('Judges — '+j.join(' · '));
   if(s.fee)m.push('<b>Entry fee:</b> '+esc(s.fee));
@@ -1560,6 +1560,21 @@ def _natl_gcal(text, start, end, loc, details):
             f"&location={quote(loc)}&details={quote(details)}")
 
 
+def _clcy_tip(s):
+    """Plain-English gloss of the AKC entry code 'TOTAL-cd-cb (sd-sb) vet'."""
+    m = re.match(r"\s*(\d+)-(\d+)-(\d+)\s*\((\d+)-(\d+)\)\s*(\d+)\s*$", str(s or ""))
+    if not m:
+        return ""
+    tot, cd, cb, sd, sb, vet = (int(x) for x in m.groups())
+    def n(k, one, many):
+        return f"{k} {one if k == 1 else many}"
+    bits = [n(cd, "class dog", "class dogs"), n(cb, "class bitch", "class bitches"),
+            n(sd, "champion dog", "champion dogs"), n(sb, "champion bitch", "champion bitches")]
+    if vet:
+        bits.append(n(vet, "veteran", "veterans"))
+    return f"{tot} Finnish Spitz total — " + ", ".join(bits)
+
+
 def _natl_shell(inner):
     css = (
         "html,body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#4a3f36;background:#fff}"
@@ -1592,10 +1607,8 @@ def render_national_html(cluster):
     placeholder when the anchor isn't in the store)."""
     if not cluster:
         return _natl_shell(
-            '<div class="hdr"><div class="lbl">FSCA National Specialty</div>'
-            '<div class="ttl">Details coming soon</div></div>'
-            '<div class="bd"><p>This year’s National Specialty will appear here once '
-            'the show is posted to the AKC event calendar.</p></div>')
+            '<div class="bd"><p>This year’s National Specialty details will appear here '
+            'once the show is posted to the AKC event calendar.</p></div>')
 
     year = cluster["start"][:4]
     where = ", ".join(x for x in (cluster["venue"], cluster["where"]) if x)
@@ -1615,10 +1628,14 @@ def render_national_html(cluster):
     jr = []
     for s in cluster["shows"]:
         parts = []
-        if s["breed_judge"]:
-            parts.append("<b>Breed:</b> " + _h(s["breed_judge"]))
-        if s["group_judge"] and s["group_judge"] != s["breed_judge"]:
-            parts.append("<b>Group:</b> " + _h(s["group_judge"]))
+        bj, gj = s["breed_judge"], s["group_judge"]
+        if bj and bj == gj:                       # one judge does breed AND the group
+            parts.append("<b>Breed &amp; Group:</b> " + _h(bj))
+        else:
+            if bj:
+                parts.append("<b>Breed:</b> " + _h(bj))
+            if gj:
+                parts.append("<b>Group:</b> " + _h(gj))
         if s["bis_judge"]:
             parts.append("<b>BIS:</b> " + _h(s["bis_judge"]))
         if parts:
@@ -1635,15 +1652,14 @@ def render_national_html(cluster):
         ent.append(f"Entries close <b>{_h(closetxt)}</b>")
     entline = (" · ".join(ent) + ". " if ent else "") + "<em>Confirm on the premium list.</em>"
 
-    turnout = (f'<div class="sec"><h3>Finnish Spitz turnout</h3><p>The breed’s biggest annual '
-               f'gathering. Entered here last year: <b>{_h(clcy)}</b>.</p></div>') if clcy else ""
+    tip = _clcy_tip(clcy)
+    entered = (f'<abbr title="{_h(tip)}" style="text-decoration:underline dotted;cursor:help">{_h(clcy)}</abbr>'
+               if tip else f'<b>{_h(clcy)}</b>')
+    turnout = (f'<div class="sec"><h3>Finnish Spitz turnout</h3><p>Finnish Spitz entered at these '
+               f'shows last year: {entered}. The National typically draws more from across the country.'
+               f'</p></div>') if clcy else ""
 
-    inner = f'''<div class="hdr">
-  <div class="lbl">FSCA National Specialty</div>
-  <div class="ttl">{year} National Specialty</div>
-  <div class="sub">{_h(cluster["dates"])} · {_h(cluster["where"])}</div>
-</div>
-<div class="bd">
+    inner = f'''<div class="bd">
   <div class="facts">
     <span>\U0001f4c5 <b>{_h(cluster["dates"])}</b></span>
     <span>\U0001f4cd <a href="{maps}" target="_blank" rel="noopener">{_h(cluster["venue"] or cluster["where"])}</a></span>
