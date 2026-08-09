@@ -1288,7 +1288,7 @@ def _make_cluster(c):
     }
 
 
-def render_map_html(events, title, subtitle):
+def render_map_html(events, title, subtitle, national_no=""):
     """Self-contained page: a Leaflet map + a filterable table, both driven by one
     baked-in dataset the browser filters by a rolling date window (from the
     viewer's today) plus state / timezone / specialty / search. Depends on nothing
@@ -1307,9 +1307,12 @@ def render_map_html(events, title, subtitle):
  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <style>
   html,body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;background:#fff}
-  header{padding:10px 14px;background:#0f2b46;color:#fff}
+  header{padding:10px 14px;background:#0f2b46;color:#fff;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .htxt{flex:1 1 auto;min-width:200px}
   header h1{margin:0;font-size:1.05rem}
   header p{margin:2px 0 0;font-size:.8rem;opacity:.85}
+  .natlbtn{flex:none;background:linear-gradient(135deg,#f6c453,#e0992e);color:#3a2a05;border:0;font:inherit;font-weight:800;font-size:.9rem;padding:9px 16px;border-radius:8px;cursor:pointer;box-shadow:0 1px 3px #0004}
+  .natlbtn:hover{filter:brightness(1.06)}
   .views{display:flex;flex-wrap:wrap;gap:14px;padding:12px 14px 4px}
   .vpane{flex:1 1 360px;min-width:270px;display:flex;flex-direction:column}
   .ph{font-size:.9rem;font-weight:600;color:#0f2b46;margin:0 0 6px}
@@ -1378,7 +1381,7 @@ def render_map_html(events, title, subtitle):
 </style>
 </head>
 <body>
-  <header><h1>__TITLE__</h1><p>__SUBTITLE__</p></header>
+  <header><div class="htxt"><h1>__TITLE__</h1><p>__SUBTITLE__</p></div><button id="natlBtn" class="natlbtn" hidden>★ National Specialty →</button></header>
   <div class="views">
     <section class="vpane">
       <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
@@ -1419,6 +1422,7 @@ def render_map_html(events, title, subtitle):
  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const ALL = __DATA__;
+const NATL = "__NATL__";
 const AKC='https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number=';
 const MAPS='https://www.google.com/maps/search/?api=1&query=';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -1622,6 +1626,15 @@ function openFromHash(){
 }
 window.addEventListener('hashchange',openFromHash);
 openFromHash();
+(function(){
+  const btn=document.getElementById('natlBtn');
+  if(!btn||!NATL)return;
+  const nc=ALL.find(c=>c.shows.some(s=>String(s.event_no)===String(NATL)));
+  if(!nc)return;
+  btn.hidden=false;
+  btn.textContent='★ '+nc.start.slice(0,4)+' National Specialty →';
+  btn.addEventListener('click',()=>{location.hash='#show='+NATL;openDetail(nc);});
+})();
 </script>
 </body>
 </html>
@@ -1629,6 +1642,7 @@ openFromHash();
     return (tpl.replace("__TITLE__", _h(title))
                .replace("__SUBTITLE__", _h(subtitle))
                .replace("__LEGEND__", legend)
+               .replace("__NATL__", _h(national_no))
                .replace("__DATA__", data))
 
 
@@ -1647,7 +1661,7 @@ def cmd_map(args):
     subtitle = (f"{shows} shows at {len(clusters)} sites · choose a window & "
                 f"filters below · updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
-    out.write_text(render_map_html(clusters, title, subtitle), encoding="utf-8")
+    out.write_text(render_map_html(clusters, title, subtitle, NATIONAL_EVENT_NO), encoding="utf-8")
     print(f"wrote {out}  ({len(clusters)} clusters / {shows} shows)")
 
 
