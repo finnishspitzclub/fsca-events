@@ -1329,12 +1329,13 @@ def render_map_html(events, title, subtitle):
   .pop .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px}
   .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000}
   .pop a{color:#0b5cad}
-  .filters{padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb;background:#fafafa}
+  .filters{padding:11px 14px;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #d3dbe4;border-bottom:1px solid #d3dbe4;background:#e7edf3}
+  .filters .flabel{font-size:.82rem;font-weight:700;color:#0f2b46;margin-right:2px}
   .filters input[type=search],.filters select{font:inherit;font-size:.85rem;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
   .filters input[type=search]{flex:1 1 180px;min-width:130px}
   .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
   .filters .count{margin-left:auto;font-size:.8rem;color:#555;white-space:nowrap}
-  .tablewrap{overflow:auto;max-height:400px}
+  .tablewrap{overflow:auto;max-height:440px;margin:6px 14px 14px;border:1px solid #e5e7eb;border-radius:8px}
   table{border-collapse:collapse;width:100%;font-size:.82rem}
   thead th{position:sticky;top:0;background:#0f2b46;color:#fff;text-align:left;padding:7px 10px;font-weight:600;white-space:nowrap}
   td{padding:6px 10px;border-bottom:1px solid #eee;vertical-align:top}
@@ -1366,7 +1367,19 @@ def render_map_html(events, title, subtitle):
 </head>
 <body>
   <header><h1>__TITLE__</h1><p>__SUBTITLE__</p></header>
+  <div class="views">
+    <section class="vpane">
+      <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
+      <div class="calgrid" id="calGrid"></div>
+    </section>
+    <section class="vpane">
+      <div class="calnav" aria-hidden="true" style="visibility:hidden"><button>&lsaquo;</button><button>Today</button><span class="ml">&mdash;</span><button>&rsaquo;</button></div>
+      <div id="map"></div>
+      <div class="legend"><strong>Timezone:</strong>__LEGEND__</div>
+    </section>
+  </div>
   <div class="filters">
+    <span class="flabel">Filter all three views:</span>
     <input type="search" id="q" placeholder="Search club, city, venue…">
     <select id="fState"><option value="">All states</option></select>
     <select id="fTz"><option value="">All timezones</option></select>
@@ -1379,16 +1392,6 @@ def render_map_html(events, title, subtitle):
       <option value="all">all upcoming</option>
     </select></label>
     <span class="count" id="count"></span>
-  </div>
-  <div class="views">
-    <section class="vpane">
-      <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
-      <div class="calgrid" id="calGrid"></div>
-    </section>
-    <section class="vpane">
-      <div id="map"></div>
-      <div class="legend"><strong>Timezone:</strong>__LEGEND__</div>
-    </section>
   </div>
   <div class="tablewrap">
     <table>
@@ -1574,6 +1577,7 @@ function showCard(s,i){
 function openDetail(c){
   if(!c)return;
   CUR=c;
+  const _sd=pd(c.start);calMonth=new Date(_sd.getFullYear(),_sd.getMonth(),1);renderCal();
   highlight(AIDX.get(c));
   const loc=[c.venue,c.where].filter(Boolean).join(', ');
   const mapLink=loc?'<a target="_blank" rel="noopener" href="'+MAPS+encodeURIComponent(loc)+'">'+esc(loc)+' ↗</a>':'';
