@@ -133,16 +133,21 @@ TZ_COLOR = {
 }
 DEFAULT_COLOR = "8"   # Graphite - unknown/unmapped state
 
-# Map pin colors (hex) per timezone, tuned to match the calendar palette.
+# Map pin colors (hex) per timezone. These are the EXACT hex values Google
+# Calendar renders for the colorId in TZ_COLOR above, so a pin on the map and
+# its event on the calendar are the same color. Google only offers 11 fixed
+# event colors and no per-event hex, so matching has to run map -> calendar.
+#   colorId 9 Blueberry #3F51B5, 10 Basil #0B8043, 6 Tangerine #F4511E,
+#   11 Tomato #D50000, 3 Grape #8E24AA, 1 Lavender #7986CB, 8 Graphite #616161.
 TZ_HEX = {
-    "ET": "#3949AB",    # blue
-    "CT": "#43A047",    # green
-    "MT": "#FB8C00",    # orange
-    "PT": "#E53935",    # red
-    "AKT": "#8E24AA",   # purple
-    "HAT": "#7986CB",   # lavender
+    "ET": "#3F51B5",    # Blueberry (colorId 9)
+    "CT": "#0B8043",    # Basil     (colorId 10)
+    "MT": "#F4511E",    # Tangerine (colorId 6)
+    "PT": "#D50000",    # Tomato    (colorId 11)
+    "AKT": "#8E24AA",   # Grape     (colorId 3)
+    "HAT": "#7986CB",   # Lavender  (colorId 1)
 }
-DEFAULT_HEX = "#757575"
+DEFAULT_HEX = "#616161"   # Graphite (colorId 8) - unknown/unmapped state
 
 TZ_LABEL = {"ET": "Eastern", "CT": "Central", "MT": "Mountain",
             "PT": "Pacific", "AKT": "Alaska", "HAT": "Hawaii"}
@@ -1195,79 +1200,172 @@ def map_points(rows, first, last):
     return pts
 
 
-def render_map_html(points, title, subtitle):
+def list_events(rows):
+    """Every event in the store as flat dicts for the filterable table below the
+    map. Unlike map_points this ignores coordinates and month bounds - it is the
+    complete cached list the page filters client-side. Pure; unit-tested."""
+    out = []
+    for r in rows:
+        sd = _parse_date(r["start_date"])
+        if not sd:
+            continue
+        tz = _tz(r["state"])
+        ed = _parse_date(r["end_date"]) or sd
+        dates = sd.isoformat() if sd == ed else f"{sd.isoformat()} – {ed.isoformat()}"
+        out.append({
+            "start": sd.isoformat(),
+            "month": sd.strftime("%Y-%m"),
+            "dates": dates,
+            "tz": tz,
+            "tzLabel": TZ_LABEL.get(tz, "—"),
+            "color": _hex_for(r["state"]),
+            "club": r["club"] or "Unknown club",
+            "city": r["city"] or "",
+            "state": r["state"] or "",
+            "venue": r["venue"] or "",
+            "close": r["close_date"] or "",
+            "clcy": _col(r, "completed_last_year") or "",
+            "high_value": bool(_col(r, "high_value")),
+            "pended": _col(r, "status") == "Pended",
+            "event_no": r["event_no"],
+        })
+    return out
+
+
+def render_map_html(points, all_events, title, subtitle):
     """Self-contained Leaflet page with `points` embedded as JSON."""
     legend = "".join(
         f'<span class="lg"><i style="background:{TZ_HEX[tz]}"></i>{TZ_LABEL[tz]}</span>'
         for tz in ("ET", "CT", "MT", "PT", "AKT", "HAT"))
-    data = json.dumps(points, separators=(",", ":"))
-    return f"""<!doctype html>
+    map_data = json.dumps(points, separators=(",", ":")).replace("</", "<\\/")
+    all_data = json.dumps(all_events, separators=(",", ":")).replace("</", "<\\/")
+    tpl = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{_h(title)}</title>
+<title>__TITLE__</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <style>
-  html,body{{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a}}
-  #wrap{{display:flex;flex-direction:column;height:100%}}
-  header{{padding:10px 14px;background:#0f2b46;color:#fff}}
-  header h1{{margin:0;font-size:1.05rem}}
-  header p{{margin:2px 0 0;font-size:.8rem;opacity:.85}}
-  #map{{flex:1 1 auto;min-height:320px}}
-  .legend{{padding:8px 14px;background:#f4f6f8;font-size:.8rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center}}
-  .lg{{display:inline-flex;align-items:center;gap:5px}}
-  .lg i{{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid #0003}}
-  .pop b{{font-size:.95rem}} .pop{{font-size:.82rem;line-height:1.35}}
-  .pop .tag{{display:inline-block;font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px}}
-  .pop .pend{{background:#ffe0b2;color:#8a4b00}} .pop .hv{{background:#ffcdd2;color:#8a0000}}
-  .pop a{{color:#0b5cad}}
+  html,body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;background:#fff}
+  header{padding:10px 14px;background:#0f2b46;color:#fff}
+  header h1{margin:0;font-size:1.05rem}
+  header p{margin:2px 0 0;font-size:.8rem;opacity:.85}
+  #map{height:400px}
+  .legend{padding:8px 14px;background:#f4f6f8;font-size:.8rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .lg{display:inline-flex;align-items:center;gap:5px}
+  .lg i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid #0003}
+  .pop b{font-size:.95rem} .pop{font-size:.82rem;line-height:1.35}
+  .pop .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px}
+  .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000}
+  .pop a{color:#0b5cad}
+  .filters{padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #e5e7eb;background:#fafafa}
+  .filters input[type=search],.filters select{font:inherit;font-size:.85rem;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+  .filters input[type=search]{flex:1 1 180px;min-width:130px}
+  .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
+  .filters .count{margin-left:auto;font-size:.8rem;color:#555;white-space:nowrap}
+  .tablewrap{overflow:auto;max-height:400px}
+  table{border-collapse:collapse;width:100%;font-size:.82rem}
+  thead th{position:sticky;top:0;background:#0f2b46;color:#fff;text-align:left;padding:7px 10px;font-weight:600;white-space:nowrap}
+  td{padding:6px 10px;border-bottom:1px solid #eee;vertical-align:top}
+  tbody tr:hover{background:#f7fafc}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid #0003;margin-right:5px;vertical-align:middle}
+  .tag{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 5px;border-radius:8px}
+  .pend{background:#ffe0b2;color:#8a4b00} .hv{background:#ffcdd2;color:#8a0000}
+  td a{color:#0b5cad;text-decoration:none} td a:hover{text-decoration:underline}
+  .empty{padding:20px;text-align:center;color:#777}
 </style>
 </head>
 <body>
-<div id="wrap">
-  <header><h1>{_h(title)}</h1><p>{_h(subtitle)}</p></header>
+  <header><h1>__TITLE__</h1><p>__SUBTITLE__</p></header>
   <div id="map"></div>
-  <div class="legend"><strong>Timezone:</strong>{legend}
+  <div class="legend"><strong>Timezone:</strong>__LEGEND__
     <span style="margin-left:auto;opacity:.7">★ = breed/group specialty &nbsp; PENDED = dates not final</span>
   </div>
-</div>
+  <div class="filters">
+    <input type="search" id="q" placeholder="Search club, city, venue…">
+    <select id="fState"><option value="">All states</option></select>
+    <select id="fTz"><option value="">All timezones</option></select>
+    <select id="fMonth"><option value="">All months</option></select>
+    <label><input type="checkbox" id="fHv"> Specialties &amp; groups</label>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Show</th><th>Location</th><th>Zone</th>
+        <th>Entries close</th><th>FS last yr</th><th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">No events match those filters.</div>
+  </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
-const EVENTS = {data};
-const map = L.map('map', {{scrollWheelZoom:true}}).setView([39.5,-98.35], 4);
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-  maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
-}}).addTo(map);
-function esc(s){{return String(s==null?'':s).replace(/[&<>"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));}}
-const seen = {{}};
-for (const e of EVENTS) {{
-  // nudge exact-duplicate coordinates apart so stacked venues stay clickable
-  let k = e.lat.toFixed(4)+','+e.lon.toFixed(4);
-  const n = (seen[k]=(seen[k]||0)+1)-1;
-  const off = n ? (n*0.02) : 0;
-  const m = L.circleMarker([e.lat+off, e.lon+off], {{
-    radius:7, color:'#fff', weight:1.5, fillColor:e.color, fillOpacity:.95
-  }}).addTo(map);
-  let h = '<div class="pop"><b>'+(e.high_value?'★ ':'')+esc(e.club)+'</b>';
-  if (e.pended) h += '<span class="tag pend">PENDED</span>';
-  h += '<br>'+esc(e.dates)+' · '+esc(e.where)+' <span style="opacity:.6">('+esc(e.tz)+')</span>';
-  if (e.venue) h += '<br>'+esc(e.venue);
-  if (e.close) h += '<br><b>Entries close:</b> '+esc(e.close);
-  if (e.clcy) h += '<br>Finnish Spitz entered last yr: '+esc(e.clcy);
-  if (e.breed_judge) h += '<br>Breed judge: '+esc(e.breed_judge);
-  h += '<br><a target="_blank" rel="noopener" href="https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number='+esc(e.event_no)+'">AKC event page →</a></div>';
+const MAP_EVENTS = __MAPDATA__;
+const ALL_EVENTS = __ALLDATA__;
+const AKC = 'https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number=';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+const map = L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const seen={};
+for(const e of MAP_EVENTS){
+  let k=e.lat.toFixed(4)+','+e.lon.toFixed(4);
+  const n=(seen[k]=(seen[k]||0)+1)-1; const off=n?(n*0.02):0;
+  const m=L.circleMarker([e.lat+off,e.lon+off],{radius:7,color:'#fff',weight:1.5,fillColor:e.color,fillOpacity:.95}).addTo(map);
+  let h='<div class="pop"><b>'+(e.high_value?'★ ':'')+esc(e.club)+'</b>';
+  if(e.pended)h+='<span class="tag pend">PENDED</span>';
+  h+='<br>'+esc(e.dates)+' · '+esc(e.where)+' <span style="opacity:.6">('+esc(e.tz)+')</span>';
+  if(e.venue)h+='<br>'+esc(e.venue);
+  if(e.close)h+='<br><b>Entries close:</b> '+esc(e.close);
+  if(e.clcy)h+='<br>Finnish Spitz entered last yr: '+esc(e.clcy);
+  if(e.breed_judge)h+='<br>Breed judge: '+esc(e.breed_judge);
+  h+='<br><a target="_blank" rel="noopener" href="'+AKC+esc(e.event_no)+'">AKC event page →</a></div>';
   m.bindPopup(h);
-}}
-if (!EVENTS.length) {{
-  L.popup().setLatLng([39.5,-98.35]).setContent('No events this period.').openOn(map);
-}}
+}
+if(!MAP_EVENTS.length){L.popup().setLatLng([39.5,-98.35]).setContent('No events this month.').openOn(map);}
+const q=document.getElementById('q'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fMonth=document.getElementById('fMonth'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty');
+function opt(sel,v,l){const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o);}
+[...new Set(ALL_EVENTS.map(e=>e.state).filter(Boolean))].sort().forEach(s=>opt(fState,s,s));
+[['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL_EVENTS.some(e=>e.tz===t[0])).forEach(t=>opt(fTz,t[0],t[1]));
+[...new Set(ALL_EVENTS.map(e=>e.month))].sort().forEach(mo=>{const d=new Date(mo+'-01T00:00');opt(fMonth,mo,d.toLocaleString('en-US',{month:'long',year:'numeric'}));});
+function render(){
+  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,mo=fMonth.value,hv=fHv.checked;
+  const list=ALL_EVENTS.filter(e=>{
+    if(st&&e.state!==st)return false;
+    if(tz&&e.tz!==tz)return false;
+    if(mo&&e.month!==mo)return false;
+    if(hv&&!e.high_value)return false;
+    if(term&&!((e.club+' '+e.city+' '+e.state+' '+e.venue).toLowerCase().includes(term)))return false;
+    return true;
+  });
+  rowsEl.innerHTML=list.map(e=>{
+    const loc=[e.city,e.state].filter(Boolean).join(', ');
+    const tags=(e.high_value?' <span class="tag hv">★</span>':'')+(e.pended?' <span class="tag pend">PENDED</span>':'');
+    return '<tr><td style="white-space:nowrap">'+esc(e.dates)+'</td>'+
+      '<td>'+esc(e.club)+tags+'</td>'+
+      '<td style="white-space:nowrap">'+esc(loc)+'</td>'+
+      '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(e.color)+'"></span>'+esc(e.tzLabel)+'</td>'+
+      '<td style="white-space:nowrap">'+esc(e.close)+'</td>'+
+      '<td>'+esc(e.clcy)+'</td>'+
+      '<td><a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(e.event_no)+'">AKC →</a></td></tr>';
+  }).join('');
+  countEl.textContent=list.length+' of '+ALL_EVENTS.length+' shows';
+  emptyEl.style.display=list.length?'none':'block';
+}
+[q,fState,fTz,fMonth,fHv].forEach(el=>el.addEventListener('input',render));
+render();
 </script>
 </body>
 </html>
 """
+    return (tpl.replace("__TITLE__", _h(title))
+               .replace("__SUBTITLE__", _h(subtitle))
+               .replace("__LEGEND__", legend)
+               .replace("__MAPDATA__", map_data)
+               .replace("__ALLDATA__", all_data))
 
 
 def cmd_map(args):
@@ -1283,19 +1381,18 @@ def cmd_map(args):
     rows = conn.execute("SELECT * FROM events ORDER BY start_date").fetchall()
     conn.close()
     points = map_points(rows, first, last)
+    listing = list_events(rows)
 
     span = first.strftime("%B %Y")
     if (last.year, last.month) != (first.year, first.month):
         span += " – " + last.strftime("%B %Y")
     title = "Finnish Spitz — AKC Events"
-    subtitle = (f"{span} · {len(points)} shows · "
-                f"updated {datetime.now().strftime('%b %-d, %Y')}"
-                if os.name != "nt" else
-                f"{span} · {len(points)} shows · "
-                f"updated {datetime.now().strftime('%b %d, %Y')}")
+    updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
+    subtitle = (f"Map: {span} · {len(points)} shows shown · "
+                f"list below: {len(listing)} shows · updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
-    out.write_text(render_map_html(points, title, subtitle), encoding="utf-8")
-    print(f"wrote {out}  ({len(points)} events, {first} .. {last})")
+    out.write_text(render_map_html(points, listing, title, subtitle), encoding="utf-8")
+    print(f"wrote {out}  (map {len(points)} / list {len(listing)}, {first} .. {last})")
 
 
 # ---------------------------------------------------------------- cli
