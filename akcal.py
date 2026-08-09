@@ -1299,8 +1299,27 @@ def render_map_html(events, title, subtitle):
   header{padding:10px 14px;background:#0f2b46;color:#fff}
   header h1{margin:0;font-size:1.05rem}
   header p{margin:2px 0 0;font-size:.8rem;opacity:.85}
-  #map{height:400px}
-  .legend{padding:8px 14px;background:#f4f6f8;font-size:.8rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .views{display:flex;flex-wrap:wrap;gap:14px;padding:12px 14px 4px}
+  .vpane{flex:1 1 440px;min-width:300px;display:flex;flex-direction:column}
+  .ph{font-size:.9rem;font-weight:600;color:#0f2b46;margin:0 0 6px}
+  .ph .phn{font-weight:400;color:#8a8f98;font-size:.8rem}
+  .ph2{padding:8px 14px 0}
+  #map{height:404px;border:1px solid #e5e7eb;border-radius:8px}
+  .calnav{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+  .calnav button{font:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;padding:3px 10px;line-height:1.2}
+  .calnav .ml{font-weight:600;font-size:.9rem;min-width:122px;text-align:center}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#e5e7eb;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .caldow{background:#0f2b46;color:#fff;text-align:center;font-size:11px;font-weight:600;padding:3px 0}
+  .calcell{background:#fff;min-height:58px;padding:2px 3px;overflow:hidden}
+  .calcell.oth{background:#fafafa}
+  .calcell .dn{font-size:11px;color:#889;font-weight:600;display:inline-block;min-width:17px;text-align:center}
+  .calcell.today .dn{background:#b5541f;color:#fff;border-radius:8px}
+  .chip{display:block;margin:1px 0;padding:0 4px;border-radius:3px;color:#fff;font-size:11px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border:0;width:100%;text-align:left}
+  .chip.sel{outline:2px solid #0f2b46;outline-offset:-2px}
+  .cmore{font-size:11px;color:#0b5cad;display:block;padding-left:3px}
+  tbody tr.sel{background:#fff7e6}
+  tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 #b5541f}
+  .legend{padding:8px 0 0;font-size:.8rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
   .lg{display:inline-flex;align-items:center;gap:5px}
   .lg i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid #0003}
   .pop b{font-size:.95rem} .pop{font-size:.82rem;line-height:1.35}
@@ -1344,24 +1363,33 @@ def render_map_html(events, title, subtitle):
 </head>
 <body>
   <header><h1>__TITLE__</h1><p>__SUBTITLE__</p></header>
-  <div id="map"></div>
-  <div class="legend"><strong>Timezone:</strong>__LEGEND__
-    <span style="margin-left:auto;opacity:.7">★ = breed/group specialty &nbsp; PENDED = dates not final</span>
-  </div>
   <div class="filters">
-    <label class="wlab">Show&nbsp;<select id="fWin">
-      <option value="30">next 30 days</option>
-      <option value="60" selected>next 60 days</option>
-      <option value="90">next 90 days</option>
-      <option value="180">next 6 months</option>
-      <option value="all">all upcoming</option>
-    </select></label>
     <input type="search" id="q" placeholder="Search club, city, venue…">
     <select id="fState"><option value="">All states</option></select>
     <select id="fTz"><option value="">All timezones</option></select>
     <label><input type="checkbox" id="fHv"> Specialties &amp; groups</label>
+    <label class="wlab">Map/list window&nbsp;<select id="fWin">
+      <option value="30">30 days</option>
+      <option value="60" selected>60 days</option>
+      <option value="90">90 days</option>
+      <option value="180">6 months</option>
+      <option value="all">all upcoming</option>
+    </select></label>
     <span class="count" id="count"></span>
   </div>
+  <div class="views">
+    <section class="vpane">
+      <div class="ph">Calendar</div>
+      <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
+      <div class="calgrid" id="calGrid"></div>
+    </section>
+    <section class="vpane">
+      <div class="ph">Map <span class="phn">· colored by timezone</span></div>
+      <div id="map"></div>
+      <div class="legend"><strong>Timezone:</strong>__LEGEND__<span style="margin-left:auto;opacity:.7">★ specialty · PENDED = dates not final</span></div>
+    </section>
+  </div>
+  <div class="ph ph2">Full list</div>
   <div class="tablewrap">
     <table>
       <thead><tr>
@@ -1387,28 +1415,34 @@ const map=L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const markers=L.layerGroup().addTo(map);
 const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty'),detailEl=document.getElementById('detail');
+const calGrid=document.getElementById('calGrid'),calLabel=document.getElementById('calLabel'),calPrev=document.getElementById('calPrev'),calNext=document.getElementById('calNext'),calToday=document.getElementById('calToday');
+const AIDX=new Map(ALL.map((c,i)=>[c,i]));
+let markerByAi={},SELMK=null,calMonth=null;
 function opt(sel,v,l){const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o);}
 [...new Set(ALL.map(c=>c.state).filter(Boolean))].sort().forEach(s=>opt(fState,s,s));
 [['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL.some(c=>c.tz===t[0])).forEach(t=>opt(fTz,t[0],t[1]));
 let shown=[];
+function baseMatch(c){
+  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,hv=fHv.checked;
+  if(st&&c.state!==st)return false;
+  if(tz&&c.tz!==tz)return false;
+  if(hv&&!c.high_value)return false;
+  if(term&&!((c.label+' '+c.venue+' '+c.city+' '+c.state+' '+c.clubs.join(' ')).toLowerCase().includes(term)))return false;
+  return true;
+}
 function filtered(){
   const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const win=fWin.value; let end=null;
   if(win!=='all'){end=new Date(today);end.setDate(today.getDate()+(+win));}
-  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,hv=fHv.checked;
   return ALL.filter(c=>{
     if(pd(c.end)<today)return false;
     if(end&&pd(c.start)>end)return false;
-    if(st&&c.state!==st)return false;
-    if(tz&&c.tz!==tz)return false;
-    if(hv&&!c.high_value)return false;
-    if(term&&!((c.label+' '+c.venue+' '+c.city+' '+c.state+' '+c.clubs.join(' ')).toLowerCase().includes(term)))return false;
-    return true;
+    return baseMatch(c);
   });
 }
 function render(refit){
   shown=filtered();
-  markers.clearLayers();
+  markers.clearLayers(); markerByAi={}; SELMK=null;
   const seen={},latlngs=[];
   shown.forEach(c=>{
     if(c.lat==null||c.lon==null)return;
@@ -1418,16 +1452,16 @@ function render(refit){
     const m=L.circleMarker(ll,{radius:7,color:'#fff',weight:1.5,fillColor:c.color,fillOpacity:.95});
     m.bindTooltip((c.high_value?'★ ':'')+c.label+(c.n>1?(' (+'+(c.n-1)+' more)'):''));
     m.on('click',()=>openDetail(c));
-    markers.addLayer(m);
+    markers.addLayer(m); markerByAi[AIDX.get(c)]=m;
   });
   if(refit&&latlngs.length){try{map.fitBounds(latlngs,{maxZoom:7,padding:[24,24]});}catch(_){}}
   let shows=0;
-  rowsEl.innerHTML=shown.map((c,i)=>{
+  rowsEl.innerHTML=shown.map(c=>{
     shows+=c.n;
     const loc=[c.city,c.state].filter(Boolean).join(', ');
     const name=c.n>1?(esc(c.label)+' <span class="nsub">+ '+(c.n-1)+' more show'+(c.n-1===1?'':'s')+'</span>'):esc(c.label);
     const tags=(c.high_value?' <span class="tag hv">★</span>':'')+(c.pended?' <span class="tag pend">PENDED</span>':'');
-    return '<tr data-i="'+i+'"><td style="white-space:nowrap">'+esc(c.dates)+'</td>'+
+    return '<tr data-ai="'+AIDX.get(c)+'"><td style="white-space:nowrap">'+esc(c.dates)+'</td>'+
       '<td>'+name+tags+'</td>'+
       '<td style="white-space:nowrap">'+esc(loc)+'</td>'+
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
@@ -1437,7 +1471,39 @@ function render(refit){
   countEl.textContent=shown.length+' listing'+(shown.length===1?'':'s')+' · '+shows+' show'+(shows===1?'':'s');
   emptyEl.style.display=shown.length?'none':'block';
 }
-rowsEl.addEventListener('click',e=>{const tr=e.target.closest('tr[data-i]');if(tr)openDetail(shown[+tr.dataset.i]);});
+function renderCal(){
+  if(!calMonth){const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);}
+  const y=calMonth.getFullYear(),m=calMonth.getMonth();
+  calLabel.textContent=calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
+  const byday={};
+  ALL.forEach(c=>{const sd=pd(c.start);if(sd.getFullYear()===y&&sd.getMonth()===m&&baseMatch(c)){(byday[sd.getDate()]=byday[sd.getDate()]||[]).push(c);}});
+  const lead=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();
+  const now=new Date(),isNow=(now.getFullYear()===y&&now.getMonth()===m);
+  let h=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>'<div class="caldow">'+d+'</div>').join('');
+  const cells=[];for(let i=0;i<lead;i++)cells.push(0);for(let d=1;d<=dim;d++)cells.push(d);while(cells.length%7)cells.push(0);
+  for(const d of cells){
+    if(!d){h+='<div class="calcell oth"></div>';continue;}
+    const evs=byday[d]||[];
+    h+='<div class="calcell'+(isNow&&d===now.getDate()?' today':'')+'"><span class="dn">'+d+'</span>';
+    evs.slice(0,3).forEach(c=>{h+='<button class="chip" data-ai="'+AIDX.get(c)+'" style="background:'+esc(c.color)+'" title="'+esc(c.label)+(c.n>1?(' +'+(c.n-1)+' more'):'')+'">'+(c.high_value?'★ ':'')+esc(c.label)+'</button>';});
+    if(evs.length>3)h+='<span class="cmore">+'+(evs.length-3)+' more</span>';
+    h+='</div>';
+  }
+  calGrid.innerHTML=h;
+}
+function renderAll(refit){render(refit);renderCal();}
+function highlight(ai){
+  document.querySelectorAll('.sel').forEach(e=>e.classList.remove('sel'));
+  document.querySelectorAll('[data-ai="'+ai+'"]').forEach(e=>e.classList.add('sel'));
+  if(SELMK){try{SELMK.setStyle({radius:7,weight:1.5,color:'#fff'});}catch(_){}}
+  const mk=markerByAi[ai];
+  if(mk){try{mk.setStyle({radius:10,weight:3,color:'#0f2b46'});mk.openTooltip();map.panTo(mk.getLatLng());}catch(_){}SELMK=mk;}
+}
+rowsEl.addEventListener('click',e=>{const tr=e.target.closest('tr[data-ai]');if(tr)openDetail(ALL[+tr.dataset.ai]);});
+calGrid.addEventListener('click',e=>{const b=e.target.closest('.chip[data-ai]');if(b)openDetail(ALL[+b.dataset.ai]);});
+calPrev.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);renderCal();});
+calNext.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);renderCal();});
+calToday.addEventListener('click',()=>{const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);renderCal();});
 function descText(s,c){
   const L=[];
   if(s.close)L.push('Entries close: '+s.close);
@@ -1488,6 +1554,7 @@ function showCard(s,i){
 function openDetail(c){
   if(!c)return;
   CUR=c;
+  highlight(AIDX.get(c));
   const loc=[c.venue,c.where].filter(Boolean).join(', ');
   const mapLink=loc?'<a target="_blank" rel="noopener" href="'+MAPS+encodeURIComponent(loc)+'">'+esc(loc)+' ↗</a>':'';
   let html='<div class="dhead"><button class="back" id="dback">‹ Back</button>'+
@@ -1502,9 +1569,11 @@ function openDetail(c){
 }
 function closeDetail(){detailEl.style.display='none';detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
-[fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>render(true)));
-q.addEventListener('input',()=>render(false));
-render(true);
+[fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
+q.addEventListener('input',()=>renderAll(false));
+renderAll(true);
+window.addEventListener('resize',()=>{try{map.invalidateSize();}catch(_){}});
+setTimeout(()=>{try{map.invalidateSize();}catch(_){}},250);
 function openFromHash(){
   const m=/#show=([\w-]+)/.exec(location.hash);
   if(!m)return;
