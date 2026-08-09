@@ -1168,42 +1168,11 @@ def _month_bounds(today, months=1):
     return first, date(y, m, 1) - timedelta(days=1)
 
 
-def map_points(rows, first, last):
-    """Store rows -> list of map point dicts for events starting in [first,last]
-    that have coordinates. Pure; unit-tested."""
-    pts = []
-    for r in rows:
-        sd = _parse_date(r["start_date"])
-        if not sd or sd < first or sd > last:
-            continue
-        lat, lon = _col(r, "lat"), _col(r, "lon")
-        if lat is None or lon is None:
-            continue
-        tz = _tz(r["state"])
-        ed = _parse_date(r["end_date"]) or sd
-        dates = sd.isoformat() if sd == ed else f"{sd.isoformat()} – {ed.isoformat()}"
-        pts.append({
-            "lat": lat, "lon": lon,
-            "color": _hex_for(r["state"]),
-            "tz": TZ_LABEL.get(tz, "—"),
-            "club": r["club"] or "Unknown club",
-            "where": ", ".join(x for x in (r["city"], r["state"]) if x),
-            "venue": r["venue"] or "",
-            "dates": dates,
-            "close": r["close_date"] or "",
-            "clcy": _col(r, "completed_last_year") or "",
-            "breed_judge": _col(r, "breed_judge") or "",
-            "pended": _col(r, "status") == "Pended",
-            "high_value": bool(_col(r, "high_value")),
-            "event_no": r["event_no"],
-        })
-    return pts
-
-
 def list_events(rows):
-    """Every event in the store as flat dicts for the filterable table below the
-    map. Unlike map_points this ignores coordinates and month bounds - it is the
-    complete cached list the page filters client-side. Pure; unit-tested."""
+    """Every event in the store as flat dicts - the single dataset baked into the
+    map page. The browser filters it by a rolling date window (from the viewer's
+    "today") plus state / timezone / specialty / search; events that carry
+    coordinates are also plotted on the map. Pure; unit-tested."""
     out = []
     for r in rows:
         sd = _parse_date(r["start_date"])
@@ -1214,7 +1183,6 @@ def list_events(rows):
         dates = sd.isoformat() if sd == ed else f"{sd.isoformat()} – {ed.isoformat()}"
         out.append({
             "start": sd.isoformat(),
-            "month": sd.strftime("%Y-%m"),
             "dates": dates,
             "tz": tz,
             "tzLabel": TZ_LABEL.get(tz, "—"),
@@ -1222,23 +1190,28 @@ def list_events(rows):
             "club": r["club"] or "Unknown club",
             "city": r["city"] or "",
             "state": r["state"] or "",
+            "where": ", ".join(x for x in (r["city"], r["state"]) if x),
             "venue": r["venue"] or "",
             "close": r["close_date"] or "",
             "clcy": _col(r, "completed_last_year") or "",
+            "breed_judge": _col(r, "breed_judge") or "",
             "high_value": bool(_col(r, "high_value")),
             "pended": _col(r, "status") == "Pended",
             "event_no": r["event_no"],
+            "lat": _col(r, "lat"), "lon": _col(r, "lon"),
         })
     return out
 
 
-def render_map_html(points, all_events, title, subtitle):
-    """Self-contained Leaflet page with `points` embedded as JSON."""
+def render_map_html(events, title, subtitle):
+    """Self-contained page: a Leaflet map + a filterable table, both driven by one
+    baked-in dataset the browser filters by a rolling date window (from the
+    viewer's today) plus state / timezone / specialty / search. Depends on nothing
+    of ours at runtime."""
     legend = "".join(
         f'<span class="lg"><i style="background:{TZ_HEX[tz]}"></i>{TZ_LABEL[tz]}</span>'
         for tz in ("ET", "CT", "MT", "PT", "AKT", "HAT"))
-    map_data = json.dumps(points, separators=(",", ":")).replace("</", "<\\/")
-    all_data = json.dumps(all_events, separators=(",", ":")).replace("</", "<\\/")
+    data = json.dumps(events, separators=(",", ":")).replace("</", "<\\/")
     tpl = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -1284,10 +1257,16 @@ def render_map_html(points, all_events, title, subtitle):
     <span style="margin-left:auto;opacity:.7">★ = breed/group specialty &nbsp; PENDED = dates not final</span>
   </div>
   <div class="filters">
+    <label class="wlab">Show&nbsp;<select id="fWin">
+      <option value="30">next 30 days</option>
+      <option value="60" selected>next 60 days</option>
+      <option value="90">next 90 days</option>
+      <option value="180">next 6 months</option>
+      <option value="all">all upcoming</option>
+    </select></label>
     <input type="search" id="q" placeholder="Search club, city, venue…">
     <select id="fState"><option value="">All states</option></select>
     <select id="fTz"><option value="">All timezones</option></select>
-    <select id="fMonth"><option value="">All months</option></select>
     <label><input type="checkbox" id="fHv"> Specialties &amp; groups</label>
     <span class="count" id="count"></span>
   </div>
@@ -1304,43 +1283,54 @@ def render_map_html(points, all_events, title, subtitle):
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
-const MAP_EVENTS = __MAPDATA__;
-const ALL_EVENTS = __ALLDATA__;
+const ALL = __DATA__;
 const AKC = 'https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number=';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 const map = L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-const seen={};
-for(const e of MAP_EVENTS){
-  let k=e.lat.toFixed(4)+','+e.lon.toFixed(4);
-  const n=(seen[k]=(seen[k]||0)+1)-1; const off=n?(n*0.02):0;
-  const m=L.circleMarker([e.lat+off,e.lon+off],{radius:7,color:'#fff',weight:1.5,fillColor:e.color,fillOpacity:.95}).addTo(map);
-  let h='<div class="pop"><b>'+(e.high_value?'★ ':'')+esc(e.club)+'</b>';
-  if(e.pended)h+='<span class="tag pend">PENDED</span>';
-  h+='<br>'+esc(e.dates)+' · '+esc(e.where)+' <span style="opacity:.6">('+esc(e.tz)+')</span>';
-  if(e.venue)h+='<br>'+esc(e.venue);
-  if(e.close)h+='<br><b>Entries close:</b> '+esc(e.close);
-  if(e.clcy)h+='<br>Finnish Spitz entered last yr: '+esc(e.clcy);
-  if(e.breed_judge)h+='<br>Breed judge: '+esc(e.breed_judge);
-  h+='<br><a target="_blank" rel="noopener" href="'+AKC+esc(e.event_no)+'">AKC event page →</a></div>';
-  m.bindPopup(h);
-}
-if(!MAP_EVENTS.length){L.popup().setLatLng([39.5,-98.35]).setContent('No events this month.').openOn(map);}
-const q=document.getElementById('q'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fMonth=document.getElementById('fMonth'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty');
+const markers = L.layerGroup().addTo(map);
+const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty');
 function opt(sel,v,l){const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o);}
-[...new Set(ALL_EVENTS.map(e=>e.state).filter(Boolean))].sort().forEach(s=>opt(fState,s,s));
-[['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL_EVENTS.some(e=>e.tz===t[0])).forEach(t=>opt(fTz,t[0],t[1]));
-[...new Set(ALL_EVENTS.map(e=>e.month))].sort().forEach(mo=>{const d=new Date(mo+'-01T00:00');opt(fMonth,mo,d.toLocaleString('en-US',{month:'long',year:'numeric'}));});
-function render(){
-  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,mo=fMonth.value,hv=fHv.checked;
-  const list=ALL_EVENTS.filter(e=>{
+[...new Set(ALL.map(e=>e.state).filter(Boolean))].sort().forEach(s=>opt(fState,s,s));
+[['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL.some(e=>e.tz===t[0])).forEach(t=>opt(fTz,t[0],t[1]));
+function filtered(){
+  const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const win=fWin.value; let end=null;
+  if(win!=='all'){end=new Date(today);end.setDate(today.getDate()+(+win));}
+  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,hv=fHv.checked;
+  return ALL.filter(e=>{
+    const sd=pd(e.start);
+    if(sd<today)return false;
+    if(end&&sd>end)return false;
     if(st&&e.state!==st)return false;
     if(tz&&e.tz!==tz)return false;
-    if(mo&&e.month!==mo)return false;
     if(hv&&!e.high_value)return false;
     if(term&&!((e.club+' '+e.city+' '+e.state+' '+e.venue).toLowerCase().includes(term)))return false;
     return true;
   });
+}
+function render(refit){
+  const list=filtered();
+  markers.clearLayers();
+  const seen={},latlngs=[];
+  for(const e of list){
+    if(e.lat==null||e.lon==null)continue;
+    let k=e.lat.toFixed(4)+','+e.lon.toFixed(4);
+    const n=(seen[k]=(seen[k]||0)+1)-1,off=n?(n*0.02):0,ll=[e.lat+off,e.lon+off];
+    latlngs.push(ll);
+    const m=L.circleMarker(ll,{radius:7,color:'#fff',weight:1.5,fillColor:e.color,fillOpacity:.95});
+    let h='<div class="pop"><b>'+(e.high_value?'★ ':'')+esc(e.club)+'</b>';
+    if(e.pended)h+='<span class="tag pend">PENDED</span>';
+    h+='<br>'+esc(e.dates)+' · '+esc(e.where)+' <span style="opacity:.6">('+esc(e.tzLabel)+')</span>';
+    if(e.venue)h+='<br>'+esc(e.venue);
+    if(e.close)h+='<br><b>Entries close:</b> '+esc(e.close);
+    if(e.clcy)h+='<br>Finnish Spitz entered last yr: '+esc(e.clcy);
+    if(e.breed_judge)h+='<br>Breed judge: '+esc(e.breed_judge);
+    h+='<br><a target="_blank" rel="noopener" href="'+AKC+esc(e.event_no)+'">AKC event page →</a></div>';
+    m.bindPopup(h);markers.addLayer(m);
+  }
+  if(refit&&latlngs.length){try{map.fitBounds(latlngs,{maxZoom:7,padding:[24,24]});}catch(_){}}
   rowsEl.innerHTML=list.map(e=>{
     const loc=[e.city,e.state].filter(Boolean).join(', ');
     const tags=(e.high_value?' <span class="tag hv">★</span>':'')+(e.pended?' <span class="tag pend">PENDED</span>':'');
@@ -1352,11 +1342,12 @@ function render(){
       '<td>'+esc(e.clcy)+'</td>'+
       '<td><a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(e.event_no)+'">AKC →</a></td></tr>';
   }).join('');
-  countEl.textContent=list.length+' of '+ALL_EVENTS.length+' shows';
+  countEl.textContent=list.length+' show'+(list.length===1?'':'s');
   emptyEl.style.display=list.length?'none':'block';
 }
-[q,fState,fTz,fMonth,fHv].forEach(el=>el.addEventListener('input',render));
-render();
+[fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>render(true)));
+q.addEventListener('input',()=>render(false));
+render(true);
 </script>
 </body>
 </html>
@@ -1364,35 +1355,25 @@ render();
     return (tpl.replace("__TITLE__", _h(title))
                .replace("__SUBTITLE__", _h(subtitle))
                .replace("__LEGEND__", legend)
-               .replace("__MAPDATA__", map_data)
-               .replace("__ALLDATA__", all_data))
+               .replace("__DATA__", data))
 
 
 def cmd_map(args):
-    month = args.month
-    if month:
-        y, m = (int(x) for x in month.split("-"))
-        anchor = date(y, m, 1)
-    else:
-        anchor = datetime.now().date()
-    first, last = _month_bounds(anchor, getattr(args, "months", 1) or 1)
-
+    # The whole store is baked in; the page windows it client-side against the
+    # viewer's own "today", so the map/list stay correct between regenerations
+    # and never get stuck showing a stale calendar month. --month/--months are
+    # accepted for back-compat but no longer change the output.
     conn = db()
     rows = conn.execute("SELECT * FROM events ORDER BY start_date").fetchall()
     conn.close()
-    points = map_points(rows, first, last)
-    listing = list_events(rows)
-
-    span = first.strftime("%B %Y")
-    if (last.year, last.month) != (first.year, first.month):
-        span += " – " + last.strftime("%B %Y")
-    title = "Finnish Spitz — AKC Events"
+    events = list_events(rows)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
-    subtitle = (f"Map: {span} · {len(points)} shows shown · "
-                f"list below: {len(listing)} shows · updated {updated}")
+    title = "Finnish Spitz — AKC Events"
+    subtitle = (f"{len(events)} shows nationwide · choose a window & filters "
+                f"below · updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
-    out.write_text(render_map_html(points, listing, title, subtitle), encoding="utf-8")
-    print(f"wrote {out}  (map {len(points)} / list {len(listing)}, {first} .. {last})")
+    out.write_text(render_map_html(events, title, subtitle), encoding="utf-8")
+    print(f"wrote {out}  ({len(events)} events)")
 
 
 # ---------------------------------------------------------------- cli
