@@ -1308,15 +1308,18 @@ def render_map_html(events, title, subtitle):
   .calnav{display:flex;align-items:center;gap:8px;margin:0 0 6px}
   .calnav button{font:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;padding:3px 10px;line-height:1.2}
   .calnav .ml{font-weight:600;font-size:.9rem;min-width:122px;text-align:center}
-  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#e5e7eb;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .calgrid{border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff}
+  .caldow-row{display:grid;grid-template-columns:repeat(7,1fr)}
   .caldow{background:#0f2b46;color:#fff;text-align:center;font-size:11px;font-weight:600;padding:3px 0}
-  .calcell{background:#fff;min-height:58px;padding:2px 3px;overflow:hidden}
-  .calcell.oth{background:#fafafa}
-  .calcell .dn{font-size:11px;color:#889;font-weight:600;display:inline-block;min-width:17px;text-align:center}
-  .calcell.today .dn{background:#b5541f;color:#fff;border-radius:8px}
-  .chip{display:block;margin:1px 0;padding:0 4px;border-radius:3px;color:#fff;font-size:11px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border:0;width:100%;text-align:left}
-  .chip.sel{outline:2px solid #0f2b46;outline-offset:-2px}
-  .cmore{font-size:11px;color:#0b5cad;display:block;padding-left:3px}
+  .calwk{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid #e5e7eb}
+  .calday{min-height:86px;border-left:1px solid #eef0f2;padding:2px 3px}
+  .calday:first-child{border-left:0}
+  .calday.oth{background:#fafafa}
+  .calday .dn{font-size:11px;color:#889;font-weight:600;display:inline-block;min-width:17px;text-align:center}
+  .calday.today .dn{background:#b5541f;color:#fff;border-radius:8px}
+  .calbar{position:absolute;height:15px;line-height:15px;border-radius:3px;color:#fff;font-size:11px;padding:0 5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;border:0;box-sizing:border-box}
+  .calbar.sel{outline:2px solid #0f2b46;outline-offset:-1px;z-index:2}
+  .cmore{color:#667;font-size:10px}
   tbody tr.sel{background:#fff7e6}
   tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 #b5541f}
   .legend{padding:8px 0 0;font-size:.8rem;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
@@ -1344,7 +1347,7 @@ def render_map_html(events, title, subtitle):
   tbody tr{cursor:pointer}
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
-  #detail{position:fixed;inset:0;background:#fff;overflow:auto;display:none;z-index:1000}
+  #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:440px}
   #detail .dhead{position:sticky;top:0;background:#0f2b46;color:#fff;padding:11px 14px;display:flex;align-items:flex-start;gap:10px;z-index:1}
   #detail .dhead h2{margin:0;font-size:1rem;flex:1;line-height:1.3}
   #detail .dhead .sub{font-size:.78rem;opacity:.85;font-weight:400}
@@ -1379,17 +1382,14 @@ def render_map_html(events, title, subtitle):
   </div>
   <div class="views">
     <section class="vpane">
-      <div class="ph">Calendar</div>
       <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
       <div class="calgrid" id="calGrid"></div>
     </section>
     <section class="vpane">
-      <div class="ph">Map <span class="phn">· colored by timezone</span></div>
       <div id="map"></div>
-      <div class="legend"><strong>Timezone:</strong>__LEGEND__<span style="margin-left:auto;opacity:.7">★ specialty · PENDED = dates not final</span></div>
+      <div class="legend"><strong>Timezone:</strong>__LEGEND__</div>
     </section>
   </div>
-  <div class="ph ph2">Full list</div>
   <div class="tablewrap">
     <table>
       <thead><tr>
@@ -1415,7 +1415,7 @@ const map=L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const markers=L.layerGroup().addTo(map);
 const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty'),detailEl=document.getElementById('detail');
-const calGrid=document.getElementById('calGrid'),calLabel=document.getElementById('calLabel'),calPrev=document.getElementById('calPrev'),calNext=document.getElementById('calNext'),calToday=document.getElementById('calToday');
+const calGrid=document.getElementById('calGrid'),calLabel=document.getElementById('calLabel'),calPrev=document.getElementById('calPrev'),calNext=document.getElementById('calNext'),calToday=document.getElementById('calToday'),tableWrap=document.querySelector('.tablewrap');
 const AIDX=new Map(ALL.map((c,i)=>[c,i]));
 let markerByAi={},SELMK=null,calMonth=null;
 function opt(sel,v,l){const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o);}
@@ -1475,19 +1475,39 @@ function renderCal(){
   if(!calMonth){const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);}
   const y=calMonth.getFullYear(),m=calMonth.getMonth();
   calLabel.textContent=calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
-  const byday={};
-  ALL.forEach(c=>{const sd=pd(c.start);if(sd.getFullYear()===y&&sd.getMonth()===m&&baseMatch(c)){(byday[sd.getDate()]=byday[sd.getDate()]||[]).push(c);}});
   const lead=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();
-  const now=new Date(),isNow=(now.getFullYear()===y&&now.getMonth()===m);
-  let h=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>'<div class="caldow">'+d+'</div>').join('');
-  const cells=[];for(let i=0;i<lead;i++)cells.push(0);for(let d=1;d<=dim;d++)cells.push(d);while(cells.length%7)cells.push(0);
-  for(const d of cells){
-    if(!d){h+='<div class="calcell oth"></div>';continue;}
-    const evs=byday[d]||[];
-    h+='<div class="calcell'+(isNow&&d===now.getDate()?' today':'')+'"><span class="dn">'+d+'</span>';
-    evs.slice(0,3).forEach(c=>{h+='<button class="chip" data-ai="'+AIDX.get(c)+'" style="background:'+esc(c.color)+'" title="'+esc(c.label)+(c.n>1?(' +'+(c.n-1)+' more'):'')+'">'+(c.high_value?'★ ':'')+esc(c.label)+'</button>';});
-    if(evs.length>3)h+='<span class="cmore">+'+(evs.length-3)+' more</span>';
-    h+='</div>';
+  const weeks=Math.ceil((lead+dim)/7);
+  const gridStart=new Date(y,m,1-lead);
+  const gEnd=new Date(gridStart);gEnd.setDate(gEnd.getDate()+weeks*7-1);
+  const now=new Date(),tkey=now.getFullYear()+'-'+now.getMonth()+'-'+now.getDate();
+  const items=ALL.filter(c=>baseMatch(c)&&pd(c.end)>=gridStart&&pd(c.start)<=gEnd);
+  const gidx=dt=>Math.round((dt-gridStart)/86400000);
+  let h='<div class="caldow-row">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>'<div class="caldow">'+d+'</div>').join('')+'</div>';
+  for(let w=0;w<weeks;w++){
+    const wStart=w*7,wEnd=w*7+6;
+    let cells='';
+    for(let col=0;col<7;col++){
+      const dt=new Date(gridStart);dt.setDate(gridStart.getDate()+wStart+col);
+      const oth=dt.getMonth()!==m,tod=(dt.getFullYear()+'-'+dt.getMonth()+'-'+dt.getDate())===tkey;
+      cells+='<div class="calday'+(oth?' oth':'')+(tod?' today':'')+'"><span class="dn">'+dt.getDate()+'</span></div>';
+    }
+    const bars=[];
+    items.forEach(c=>{
+      const s=Math.max(gidx(pd(c.start)),wStart),e=Math.min(gidx(pd(c.end)),wEnd);
+      if(s>e)return;
+      bars.push({c,s:s-wStart,e:e-wStart,cont:gidx(pd(c.start))<wStart});
+    });
+    bars.sort((a,b)=>a.s-b.s||b.e-a.e);
+    const laneEnd=[];
+    bars.forEach(b=>{let l=0;while(laneEnd[l]!==undefined&&laneEnd[l]>=b.s)l++;laneEnd[l]=b.e;b.lane=l;});
+    let bh='';const MAXL=3,ov={};
+    bars.forEach(b=>{
+      if(b.lane>=MAXL){for(let d=b.s;d<=b.e;d++)ov[d]=(ov[d]||0)+1;return;}
+      const left=(b.s/7*100),width=((b.e-b.s+1)/7*100);
+      bh+='<button class="calbar" data-ai="'+AIDX.get(b.c)+'" title="'+esc(b.c.label)+' — '+esc(b.c.dates)+'" style="left:calc('+left.toFixed(3)+'% + 2px);width:calc('+width.toFixed(3)+'% - 4px);top:'+(20+b.lane*17)+'px;background:'+esc(b.c.color)+'">'+(b.c.high_value?'★ ':'')+(b.cont?'‹ ':'')+esc(b.c.label)+'</button>';
+    });
+    for(const d in ov)bh+='<span class="cmore" style="position:absolute;left:calc('+(d/7*100).toFixed(3)+'% + 3px);top:'+(20+MAXL*17)+'px">+'+ov[d]+'</span>';
+    h+='<div class="calwk">'+cells+bh+'</div>';
   }
   calGrid.innerHTML=h;
 }
@@ -1500,7 +1520,7 @@ function highlight(ai){
   if(mk){try{mk.setStyle({radius:10,weight:3,color:'#0f2b46'});mk.openTooltip();map.panTo(mk.getLatLng());}catch(_){}SELMK=mk;}
 }
 rowsEl.addEventListener('click',e=>{const tr=e.target.closest('tr[data-ai]');if(tr)openDetail(ALL[+tr.dataset.ai]);});
-calGrid.addEventListener('click',e=>{const b=e.target.closest('.chip[data-ai]');if(b)openDetail(ALL[+b.dataset.ai]);});
+calGrid.addEventListener('click',e=>{const b=e.target.closest('.calbar[data-ai]');if(b)openDetail(ALL[+b.dataset.ai]);});
 calPrev.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);renderCal();});
 calNext.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);renderCal();});
 calToday.addEventListener('click',()=>{const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);renderCal();});
@@ -1562,12 +1582,14 @@ function openDetail(c){
     '<div class="body"><p class="csum">'+(mapLink?('📍 '+mapLink+' · '):'')+c.n+' show'+(c.n===1?'':'s')+' at this site</p>'+
     c.shows.map((s,i)=>showCard(s,i)).join('')+'</div>';
   detailEl.innerHTML=html;
+  tableWrap.style.display='none';
   detailEl.style.display='block';
   detailEl.setAttribute('aria-hidden','false');
   detailEl.scrollTop=0;
+  detailEl.scrollIntoView({block:'nearest'});
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
-function closeDetail(){detailEl.style.display='none';detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
+function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
 [fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
 q.addEventListener('input',()=>renderAll(false));
