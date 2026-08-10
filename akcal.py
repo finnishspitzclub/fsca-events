@@ -1352,7 +1352,17 @@ def render_map_html(events, title, subtitle, national_no=""):
   .pop .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px}
   .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000}
   .pop a{color:#0b5cad}
-  .filters{padding:11px 14px;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #d3dbe4;border-bottom:1px solid #d3dbe4;background:#e7edf3}
+  .filters{padding:11px 14px;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #d3dbe4;border-bottom:1px solid #d3dbe4;background:#e7edf3;position:relative;z-index:30}
+  .zones{display:inline-flex;gap:4px;flex-wrap:wrap}
+  .zchip{font:inherit;font-size:.8rem;padding:4px 9px;border:1px solid #cbd5e1;border-radius:14px;background:#fff;cursor:pointer;color:#334;transition:background-color .12s ease,color .12s ease}
+  .zchip.on{background:#0f2b46;color:#fff;border-color:#0f2b46}
+  .msdd{position:relative;display:inline-block}
+  .msbtn{font:inherit;font-size:.85rem;padding:5px 9px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer}
+  .mspanel{position:absolute;z-index:1000;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 14px #0003;padding:6px;max-height:264px;overflow:auto;min-width:170px}
+  .mspanel label{display:flex;align-items:center;gap:6px;font-size:.82rem;padding:3px 6px;border-radius:5px;cursor:pointer;white-space:nowrap}
+  .mspanel label:hover{background:#eef3f8}
+  .clearbtn{font:inherit;font-size:.82rem;padding:5px 11px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;color:#334}
+  .clearbtn:hover{background:#eef3f8}
   .filters input[type=search],.filters select{font:inherit;font-size:.85rem;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
   .filters input[type=search]{flex:1 1 180px;min-width:130px}
   .filters label{font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
@@ -1411,16 +1421,20 @@ def render_map_html(events, title, subtitle, national_no=""):
   </div>
   <div class="filters">
     <input type="search" id="q" placeholder="Search club, city, venue…">
-    <select id="fState"><option value="">All states</option></select>
-    <select id="fTz"><option value="">All timezones</option></select>
+    <div class="msdd" id="stateDD">
+      <button type="button" class="msbtn" id="stateBtn">All states ▾</button>
+      <div class="mspanel" id="statePanel" hidden></div>
+    </div>
+    <div class="zones" id="zoneWrap"></div>
     <label><input type="checkbox" id="fHv"> Specialties &amp; groups</label>
-    <label class="wlab">Map/list window&nbsp;<select id="fWin">
+    <label class="wlab">Window&nbsp;<select id="fWin">
       <option value="30">30 days</option>
       <option value="60" selected>60 days</option>
       <option value="90">90 days</option>
       <option value="180">6 months</option>
       <option value="all">all upcoming</option>
     </select></label>
+    <button type="button" class="clearbtn" id="clearBtn">Clear</button>
     <span class="count" id="count"></span>
   </div>
   <div class="tablewrap">
@@ -1449,18 +1463,31 @@ function plusDay(s){const d=pd(s);d.setDate(d.getDate()+1);return d.getFullYear(
 const map=L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const markers=L.layerGroup().addTo(map);
-const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fState=document.getElementById('fState'),fTz=document.getElementById('fTz'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty'),detailEl=document.getElementById('detail');
+const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty'),detailEl=document.getElementById('detail');
 const calGrid=document.getElementById('calGrid'),calLabel=document.getElementById('calLabel'),calPrev=document.getElementById('calPrev'),calNext=document.getElementById('calNext'),calToday=document.getElementById('calToday'),tableWrap=document.querySelector('.tablewrap');
 const AIDX=new Map(ALL.map((c,i)=>[c,i]));
 let markerByAi={},SELMK=null,calMonth=null;
-function opt(sel,v,l){const o=document.createElement('option');o.value=v;o.textContent=l;sel.appendChild(o);}
-[...new Set(ALL.map(c=>c.state).filter(Boolean))].sort().forEach(s=>opt(fState,s,s));
-[['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL.some(c=>c.tz===t[0])).forEach(t=>opt(fTz,t[0],t[1]));
+// Timezones = toggle chips (multi). States = a checkbox dropdown whose options
+// are limited to the selected zones, so you can't pick a state outside them
+// (kills the "Mountain + California" empty-result confusion).
+const ZONES=[['ET','Eastern'],['CT','Central'],['MT','Mountain'],['PT','Pacific'],['AKT','Alaska'],['HAT','Hawaii']].filter(t=>ALL.some(c=>c.tz===t[0]));
+const selZones=new Set(),selStates=new Set();
+const zoneWrap=document.getElementById('zoneWrap'),stateBtn=document.getElementById('stateBtn'),statePanel=document.getElementById('statePanel'),clearBtn=document.getElementById('clearBtn');
+function availStates(){return [...new Set(ALL.filter(c=>!selZones.size||selZones.has(c.tz)).map(c=>c.state).filter(Boolean))].sort();}
+function syncStatesToZones(){if(!selZones.size)return;[...selStates].forEach(s=>{if(!ALL.some(c=>c.state===s&&selZones.has(c.tz)))selStates.delete(s);});}
+function updateStateBtn(){stateBtn.textContent=(selStates.size?selStates.size+' state'+(selStates.size>1?'s':''):'All states')+' ▾';}
+function buildStatePanel(){const st=availStates();statePanel.innerHTML=st.length?st.map(s=>'<label><input type="checkbox" value="'+s+'"'+(selStates.has(s)?' checked':'')+'> '+s+'</label>').join(''):'<div style="padding:6px;color:#889;font-size:.8rem">No states in the chosen zones</div>';}
+ZONES.forEach(function(t){var b=document.createElement('button');b.type='button';b.className='zchip';b.dataset.tz=t[0];b.textContent=t[1];b.addEventListener('click',function(){if(selZones.has(t[0]))selZones.delete(t[0]);else selZones.add(t[0]);b.classList.toggle('on');syncStatesToZones();buildStatePanel();updateStateBtn();renderAll(true);});zoneWrap.appendChild(b);});
+stateBtn.addEventListener('click',function(e){e.stopPropagation();statePanel.hidden=!statePanel.hidden;});
+statePanel.addEventListener('change',function(e){var cb=e.target;if(cb&&cb.matches&&cb.matches('input[type=checkbox]')){if(cb.checked)selStates.add(cb.value);else selStates.delete(cb.value);updateStateBtn();renderAll(true);}});
+document.addEventListener('click',function(e){if(!e.target.closest('#stateDD'))statePanel.hidden=true;});
+clearBtn.addEventListener('click',function(){selZones.clear();selStates.clear();q.value='';fHv.checked=false;fWin.value='60';[...zoneWrap.querySelectorAll('.zchip')].forEach(function(b){b.classList.remove('on');});buildStatePanel();updateStateBtn();statePanel.hidden=true;renderAll(true);});
+buildStatePanel();updateStateBtn();
 let shown=[];
 function baseMatch(c){
-  const term=q.value.trim().toLowerCase(),st=fState.value,tz=fTz.value,hv=fHv.checked;
-  if(st&&c.state!==st)return false;
-  if(tz&&c.tz!==tz)return false;
+  const term=q.value.trim().toLowerCase(),hv=fHv.checked;
+  if(selStates.size&&!selStates.has(c.state))return false;
+  if(selZones.size&&!selZones.has(c.tz))return false;
   if(hv&&!c.high_value)return false;
   if(term&&!((c.label+' '+c.venue+' '+c.city+' '+c.state+' '+c.clubs.join(' ')).toLowerCase().includes(term)))return false;
   return true;
@@ -1635,7 +1662,7 @@ function openDetail(c){
 }
 function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
-[fWin,fState,fTz,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
+[fWin,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
 q.addEventListener('input',()=>renderAll(false));
 renderAll(true);
 window.addEventListener('resize',()=>{try{map.invalidateSize();}catch(_){}});
