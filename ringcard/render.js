@@ -76,7 +76,7 @@ function main() {
   const cfg = JSON.parse(fs.readFileSync(opt.weekend, 'utf8'));
   validate(inter);
 
-  const est = Object.assign({ minPerDog: 2.5, minPerGroup: 20 }, cfg.estimates || {});
+  const est = Object.assign({ minPerDog: 2.5, minPerGroup: 30 }, cfg.estimates || {});
   const my = (cfg.myBreeds || []).map(String);
   const other = (cfg.otherBreeds || []).map(String);
   const tracked = [...my, ...other];

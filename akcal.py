@@ -1481,7 +1481,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showgroups .ge{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.7rem;color:#9a8a7a} .showgroups .gmine .ge{color:#7a2e12}
   .showgroups .gjudges{flex:1;min-width:0;border-left:1px solid #f0d9c4;padding-left:11px;display:flex;flex-direction:column;justify-content:center}
   .showgroups .grow3{font-size:.82rem;color:#4a3f36;line-height:1.9;white-space:nowrap}
-  .grl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .grl{display:inline-block;box-sizing:border-box;min-width:40px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
   .grl.n{background:#7a2e12;color:#fff} .grl.b{background:#5b4a3d;color:#fff}
   .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
   .jsrc{color:#9aa5b1;font-weight:400;font-size:.9em}
@@ -1773,7 +1773,7 @@ function showCard(s,i){
     // Non-Sporting group highlighted, plus your Reg / NOHS / BIS judges. No title.
     var seq=(rc.gseq||[]).map(function(g,ix){
       return '<div class="grow4'+(g.mine?' gmine':'')+'"><span class="gn">'+(ix+1)+'</span>'+
-        '<span class="gg">'+esc(g.g)+(g.mine?' ★':'')+'</span>'+
+        '<span class="gg">'+esc(g.g)+'</span>'+
         '<span class="ge">'+(g.est?'~'+esc(g.est):'')+'</span></div>';
     }).join('');
     var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'', gl='';
@@ -1922,14 +1922,17 @@ def cmd_ringcards(args):
                 grps = d.get("groups") or {}
                 reg = grps.get("regular") or {}
                 startMin = reg.get("startMin")
-                # full regular group running order with est times (start + i*20,
+                # full regular group running order with est times (start + i*30,
                 # matching the ring card's minPerGroup) so the exhibitor can see
-                # who runs before Non-Sporting and gauge progress through the day
+                # who runs before Non-Sporting and gauge progress through the day.
+                # 30 min/group is a rough planning figure (AKC ~2.5 min/dog; a
+                # group ring holds one dog per competing breed) — actual length
+                # swings with the day's entry, so these are deliberately "~".
                 gseq = []
                 for gi, g in enumerate(reg.get("order") or []):
                     nm = g.get("group") or ""
                     gseq.append({"g": nm,
-                                 "est": _hmm(startMin + gi * 20) if startMin is not None else "",
+                                 "est": _hmm(startMin + gi * 30) if startMin is not None else "",
                                  "mine": "non-sporting" in nm.lower()})
                 # program's Owner-Handled (NOHS) Non-Sporting judge (AKC fallback)
                 nohs = ""

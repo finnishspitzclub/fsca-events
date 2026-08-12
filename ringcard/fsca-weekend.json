@@ -6,5 +6,5 @@
   "myBreeds": ["Finnish Spitz"],
   "otherBreeds": [],
   "clashes": [],
-  "estimates": {"minPerDog": 2.5, "minPerGroup": 20}
+  "estimates": {"minPerDog": 2.5, "minPerGroup": 30}
 }
