@@ -1472,7 +1472,14 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .sra{font-size:.79rem;color:#6b5d50;margin-top:5px;line-height:1.4} .showring .sra b{color:#7a2e12}
   .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
-  .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;gap:11px;align-items:stretch}
+  .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;flex-direction:column;gap:8px}
+  .showgroups .gbody{display:flex;gap:11px;align-items:stretch}
+  .showgroups .ghdr{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .gchip{font-size:.68rem;color:#5a4d40;background:#fff;border:1px solid #f0d9c4;border-radius:5px;padding:2px 7px;white-space:nowrap}
+  .gchip b{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;font-weight:700;color:#7a2e12;margin-right:4px;letter-spacing:.02em}
+  .gchip.early{border-color:#c65a2e;background:#fdeee6}
+  .gwarn{flex-basis:100%;font-size:.72rem;font-weight:600;color:#7a2e12;background:rgba(198,90,46,.12);border:1px solid #eabfa8;border-radius:6px;padding:4px 8px}
+  .gwarn b{font-weight:800}
   .showgroups .gorder{flex:0 0 158px}
   .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font-size:.76rem;color:#6b5d50;padding:1.5px 0}
   .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12}
@@ -1780,7 +1787,21 @@ function showCard(s,i){
     if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
     if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
     if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
-    if(seq||gl)grouppanel='<div class="showgroups">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>';
+    // Group-timing header: Regular vs NOHS ring + start. NOHS routinely runs
+    // BEFORE Regular (AKC recommends >=30 min earlier) and it's easy to catch
+    // Regular and miss NOHS entirely — so when NOHS is earlier, call it out.
+    function gchip(lab,ring,time,cls){
+      if(ring==null && !time) return '';
+      var b=[]; if(ring!=null)b.push('Ring '+ring); if(time)b.push(time);
+      return '<span class="gchip '+cls+'"><b>'+lab+'</b>'+esc(b.join(' · '))+'</span>';
+    }
+    var nearly=(rc.nmin!=null&&rc.gmin!=null&&rc.nmin<rc.gmin);
+    var ghdr='', rchip=gchip('REG',rc.gring,rc.gstart,''), nchip=gchip('NOHS',rc.nring,rc.ntime,nearly?'early':'');
+    if(rchip||nchip){
+      var warn=nearly?'<div class="gwarn">⚠ Owner-Handled groups run <b>before</b> Regular — be at '+(rc.nring!=null?'Ring '+rc.nring:'the group ring')+(rc.ntime?' by '+esc(rc.ntime):'')+'</div>':'';
+      ghdr='<div class="ghdr">'+rchip+nchip+warn+'</div>';
+    }
+    if(seq||gl||ghdr)grouppanel='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div></div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
@@ -1934,9 +1955,13 @@ def cmd_ringcards(args):
                     gseq.append({"g": nm,
                                  "est": _hmm(startMin + gi * 30) if startMin is not None else "",
                                  "mine": "non-sporting" in nm.lower()})
-                # program's Owner-Handled (NOHS) Non-Sporting judge (AKC fallback)
+                # program's Owner-Handled (NOHS) block: Non-Sporting judge (AKC
+                # fallback) plus its ring + start time. NOHS groups routinely run
+                # BEFORE Regular (AKC recommends >=30 min earlier), and neither the
+                # ring nor the time is in the AKC feed — only the program has them.
+                nohsblk = grps.get("nohs") or {}
                 nohs = ""
-                for g in ((grps.get("nohs") or {}).get("order") or []):
+                for g in (nohsblk.get("order") or []):
                     if "non-sporting" in (g.get("group") or "").lower():
                         nohs = g.get("judge") or ""
                         break
@@ -1947,7 +1972,10 @@ def cmd_ringcards(args):
                             "ahead": e.get("ahead") or 0, "count": e.get("entryCount"),
                             "split": e.get("split") or "",
                             "prev": e.get("prevBreed"), "prevN": e.get("prevN"),
-                            "nohs": nohs, "gstart": reg.get("start"), "gseq": gseq}
+                            "nohs": nohs, "gstart": reg.get("start"), "gmin": startMin,
+                            "gring": reg.get("ring"),
+                            "ntime": nohsblk.get("start"), "nmin": nohsblk.get("startMin"),
+                            "nring": nohsblk.get("ring"), "gseq": gseq}
             made += 1
             for eno, edate in event_nos.items():
                 manifest[eno] = {"card": f"ringcards/{kb}.html", "fs": fs_by_date.get(edate)}
