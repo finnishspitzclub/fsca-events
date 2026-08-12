@@ -1215,6 +1215,13 @@ def _docs(js):
     return out
 
 
+def _hmm(mm):
+    """minutes since midnight -> '2:45p' (for group est times)."""
+    mm = int(round(mm)) % 1440
+    h, m = divmod(mm, 60)
+    return f"{(h % 12) or 12}:{m:02d}{'a' if h < 12 else 'p'}"
+
+
 def _span_label(sd, ed):
     """Human date/date-range with weekday, e.g. 'Wed Aug 5 - Sun Aug 9, 2026'."""
     def one(d):
@@ -1455,9 +1462,9 @@ def render_map_html(events, title, subtitle, national_no=""):
   .rcardbtn:hover{filter:brightness(1.07)}
   .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
   .showmain{flex:1 1 300px;min-width:0}
-  /* two day-of components: breed ring (left), group judges (right) — both
-     centered, no titles (the exhibitor knows it's day-of because it's the day) */
-  .showring,.showgroups{flex:0 0 184px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:12px 11px;text-align:center;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:1px}
+  /* two day-of components, no titles: breed ring (centered) + the full group
+     running order with your judges (a compact ordered list) */
+  .showring{flex:0 0 172px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:12px 11px;text-align:center;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:1px}
   .showring .srbig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;justify-content:center}
   .showring .srring{font-size:1.1rem;font-weight:800;color:#7a2e12}
   .showring .srt{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;color:#7a2e12;font-size:.98rem}
@@ -1465,7 +1472,14 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .sra{font-size:.79rem;color:#6b5d50;margin-top:5px;line-height:1.4} .showring .sra b{color:#7a2e12}
   .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
-  .showgroups .grow3{font-size:.84rem;color:#4a3f36;line-height:2.05}
+  .showgroups{flex:0 0 200px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch}
+  .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font-size:.76rem;color:#6b5d50;padding:1.5px 0}
+  .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12;padding-left:5px;margin-left:-5px}
+  .showgroups .gn{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.64rem;color:#b09a86;text-align:right} .showgroups .gmine .gn{color:#7a2e12}
+  .showgroups .gg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .showgroups .ge{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.7rem;color:#9a8a7a} .showgroups .gmine .ge{color:#7a2e12}
+  .showgroups .gjudges{margin-top:8px;padding-top:7px;border-top:1px solid #f0d9c4}
+  .showgroups .grow3{font-size:.82rem;color:#4a3f36;line-height:1.85}
   .grl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
   .grl.n{background:#7a2e12;color:#fff} .grl.b{background:#5b4a3d;color:#fff}
   .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
@@ -1754,12 +1768,18 @@ function showCard(s,i){
       '<div class="sra">'+order+'</div>'+
       (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> Finnish Spitz'+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
       '</div>';
-    // Group stage — separate matching component, no title
+    // Group stage — the full running order (so you can gauge progress) with the
+    // Non-Sporting group highlighted, plus your Reg / NOHS / BIS judges. No title.
+    var seq=(rc.gseq||[]).map(function(g,ix){
+      return '<div class="grow4'+(g.mine?' gmine':'')+'"><span class="gn">'+(ix+1)+'</span>'+
+        '<span class="gg">'+esc(g.g)+(g.mine?' ★':'')+'</span>'+
+        '<span class="ge">'+(g.est?'~'+esc(g.est):'')+'</span></div>';
+    }).join('');
     var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'', gl='';
     if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
     if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
     if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
-    if(gl)grouppanel='<div class="showgroups">'+gl+'</div>';
+    if(seq||gl)grouppanel='<div class="showgroups">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
@@ -1898,10 +1918,21 @@ def cmd_ringcards(args):
             # unique value is ring, time, running order and this-year's count.
             fs_by_date = {}
             for d in inter.get("days", []):
-                # the program's Owner-Handled (NOHS) Non-Sporting group judge for
-                # this day — a fallback for the card when AKC doesn't provide it
+                grps = d.get("groups") or {}
+                reg = grps.get("regular") or {}
+                startMin = reg.get("startMin")
+                # full regular group running order with est times (start + i*20,
+                # matching the ring card's minPerGroup) so the exhibitor can see
+                # who runs before Non-Sporting and gauge progress through the day
+                gseq = []
+                for gi, g in enumerate(reg.get("order") or []):
+                    nm = g.get("group") or ""
+                    gseq.append({"g": nm,
+                                 "est": _hmm(startMin + gi * 20) if startMin is not None else "",
+                                 "mine": "non-sporting" in nm.lower()})
+                # program's Owner-Handled (NOHS) Non-Sporting judge (AKC fallback)
                 nohs = ""
-                for g in (((d.get("groups") or {}).get("nohs") or {}).get("order") or []):
+                for g in ((grps.get("nohs") or {}).get("order") or []):
                     if "non-sporting" in (g.get("group") or "").lower():
                         nohs = g.get("judge") or ""
                         break
@@ -1912,7 +1943,7 @@ def cmd_ringcards(args):
                             "ahead": e.get("ahead") or 0, "count": e.get("entryCount"),
                             "split": e.get("split") or "",
                             "prev": e.get("prevBreed"), "prevN": e.get("prevN"),
-                            "nohs": nohs}
+                            "nohs": nohs, "gstart": reg.get("start"), "gseq": gseq}
             made += 1
             for eno, edate in event_nos.items():
                 manifest[eno] = {"card": f"ringcards/{kb}.html", "fs": fs_by_date.get(edate)}
