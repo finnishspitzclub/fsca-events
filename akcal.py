@@ -1475,9 +1475,9 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;gap:11px;align-items:stretch}
   .showgroups .gorder{flex:0 0 158px}
   .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font-size:.76rem;color:#6b5d50;padding:1.5px 0}
-  .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12;padding-left:5px;margin-left:-5px}
+  .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12}
   .showgroups .gn{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.64rem;color:#b09a86;text-align:right} .showgroups .gmine .gn{color:#7a2e12}
-  .showgroups .gg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .showgroups .gg{white-space:nowrap}
   .showgroups .ge{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.7rem;color:#9a8a7a} .showgroups .gmine .ge{color:#7a2e12}
   .showgroups .gjudges{flex:1;min-width:0;border-left:1px solid #f0d9c4;padding-left:11px;display:flex;flex-direction:column;justify-content:center}
   .showgroups .grow3{font-size:.82rem;color:#4a3f36;line-height:1.9;white-space:nowrap}
