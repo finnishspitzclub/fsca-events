@@ -1424,6 +1424,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
   .fsnone{color:#c2c8d0}
+  .shcell{max-width:340px}
   .docs .doc{text-decoration:none;font-size:1.02rem;margin-right:3px;line-height:1}
   .docs .doc:hover{filter:brightness(1.15)}
   .doclink{color:#0b5cad;text-decoration:none;white-space:nowrap}
@@ -1485,7 +1486,7 @@ def render_map_html(events, title, subtitle, national_no=""):
     <table>
       <thead><tr>
         <th>Dates</th><th>Show(s)</th><th>Location</th><th>Zone</th>
-        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / judging program / entry form — direct PDFs from AKC">Docs</th><th></th>
+        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -1504,6 +1505,7 @@ function fmtFee(v){const f=parseFloat(v);return isNaN(f)?esc(v):'$'+f.toFixed(2)
 function docIcon(code){return code==='PRMLST'?'📄':code==='JDGPRO'?'📋':code==='ENTFRM'?'📝':'ℹ️';}
 function docIcons(docs){return (docs||[]).map(d=>'<a class="doc" target="_blank" rel="noopener" title="'+esc(d.label)+' — PDF from AKC" href="'+esc(d.url)+'">'+docIcon(d.code)+'</a>').join('');}
 function docIconsByType(docs){var seen={},out=[];(docs||[]).forEach(function(d){if(!seen[d.code]){seen[d.code]=1;out.push(d);}});return docIcons(out);}
+function docCell(docs,codes){return docIconsByType((docs||[]).filter(function(d){return codes.indexOf(d.code)>=0;}));}
 function docLinks(docs){return (docs||[]).map(d=>'<a class="doclink" target="_blank" rel="noopener" href="'+esc(d.url)+'">'+docIcon(d.code)+' '+esc(d.label)+'</a>').join(' · ');}
 function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 function ymd(s){return String(s).replace(/-/g,'');}
@@ -1587,12 +1589,13 @@ function render(refit){
     const name=c.n>1?(esc(c.label)+' <span class="nsub">+ '+(c.n-1)+' more show'+(c.n-1===1?'':'s')+'</span>'):esc(c.label);
     const tags=(c.high_value?' <span class="tag hv">★</span>':'')+(c.pended?' <span class="tag pend">PENDED</span>':'');
     return '<tr data-ai="'+AIDX.get(c)+'"><td style="white-space:nowrap">'+esc(c.dates)+'</td>'+
-      '<td>'+name+tags+'</td>'+
+      '<td class="shcell">'+name+tags+'</td>'+
       '<td style="white-space:nowrap">'+esc(loc)+'</td>'+
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
       '<td style="text-align:center;white-space:nowrap"'+(c.fs_last_tip?' title="'+esc(c.fs_last_tip)+'"':'')+'>'+(c.fs_last!=null?'<b>'+c.fs_last+'</b>':'<span class="fsnone">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+esc(c.close)+'</td>'+
-      '<td class="docs" style="white-space:nowrap">'+docIconsByType(c.docs)+'</td>'+
+      '<td class="docs" style="white-space:nowrap">'+docCell(c.docs,['PRMLST','ENTFRM','EVNINF'])+'</td>'+
+      '<td class="docs" style="white-space:nowrap">'+docCell(c.docs,['JDGPRO'])+'</td>'+
       '<td class="chev">&rsaquo;</td></tr>';
   }).join('');
   countEl.textContent=shown.length+' listing'+(shown.length===1?'':'s')+' · '+shows+' show'+(shows===1?'':'s');
