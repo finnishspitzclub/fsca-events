@@ -1455,21 +1455,19 @@ def render_map_html(events, title, subtitle, national_no=""):
   .rcardbtn:hover{filter:brightness(1.07)}
   .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
   .showmain{flex:1 1 300px;min-width:0}
-  .showring{flex:0 0 208px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:9px 11px;align-self:stretch}
-  .showring .srh{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#a3431c;margin-bottom:6px}
-  .showring .srbig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-  .showring .srring{font-size:1.05rem;font-weight:800;color:#7a2e12}
-  .showring .srt{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;color:#7a2e12;font-size:.95rem}
+  /* two day-of components: breed ring (left), group judges (right) — both
+     centered, no titles (the exhibitor knows it's day-of because it's the day) */
+  .showring,.showgroups{flex:0 0 184px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:12px 11px;text-align:center;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:1px}
+  .showring .srbig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;justify-content:center}
+  .showring .srring{font-size:1.1rem;font-weight:800;color:#7a2e12}
+  .showring .srt{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;color:#7a2e12;font-size:.98rem}
+  .showring .srj{font-size:.85rem;color:#4a3f36;margin-top:3px;font-weight:600}
   .showring .sra{font-size:.79rem;color:#6b5d50;margin-top:5px;line-height:1.4} .showring .sra b{color:#7a2e12}
   .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
-  .showring .srf{font-size:.66rem;color:#b09a86;margin-top:7px;font-style:italic}
-  .showring .srj{font-size:.82rem;color:#4a3f36;margin-top:2px;font-weight:600}
-  .showring .srgrp{margin-top:8px;padding-top:7px;border-top:1px solid #f0d9c4}
-  .showring .srgh{font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#a3431c;margin-bottom:4px}
-  .showring .srgl{font-size:.8rem;color:#4a3f36;line-height:1.65}
-  .showring .grl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 4px;border-radius:3px;margin-right:4px}
-  .showring .grl.n{background:#7a2e12;color:#fff} .showring .grl.b{background:#5b4a3d;color:#fff}
+  .showgroups .grow3{font-size:.84rem;color:#4a3f36;line-height:2.05}
+  .grl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .grl.n{background:#7a2e12;color:#fff} .grl.b{background:#5b4a3d;color:#fff}
   .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
   .jsrc{color:#9aa5b1;font-weight:400;font-size:.9em}
   .showcard h3{margin:0 0 4px;font-size:.96rem}
@@ -1743,28 +1741,29 @@ function showCard(s,i){
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
-  var ringpanel='';
+  var ringpanel='', grouppanel='';
   if(prog){
     var rc=s.rc;
     var order = rc.ahead>0
       ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
       : '<b>first</b> in the ring';
-    var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'';
-    var glines='';
-    if(reg)glines+='<div class="srgl"><span class="grl">Reg</span> '+esc(reg)+'</div>';
-    if(oh)glines+='<div class="srgl"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
-    if(s.bis_judge)glines+='<div class="srgl"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
-    ringpanel='<div class="showring"><div class="srh">🎯 Finnish Spitz · day of</div>'+
+    // Breed stage — centered, no title
+    ringpanel='<div class="showring">'+
       '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
       (s.breed_judge?'<div class="srj">'+esc(s.breed_judge)+'</div>':'')+
       '<div class="sra">'+order+'</div>'+
-      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> entered this year'+(rc.split?' <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
-      (glines?('<div class="srgrp"><div class="srgh">End-of-day · Non-Sporting</div>'+glines+'</div>'):'')+
-      '<div class="srf">ring &amp; order from program · judges from AKC</div></div>';
+      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> Finnish Spitz'+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
+      '</div>';
+    // Group stage — separate matching component, no title
+    var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'', gl='';
+    if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
+    if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
+    if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
+    if(gl)grouppanel='<div class="showgroups">'+gl+'</div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
-    '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>'+ringpanel+'</div>';
+    '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>'+ringpanel+grouppanel+'</div>';
 }
 function openDetail(c){
   if(!c)return;
