@@ -1,0 +1,10 @@
+{
+  "_comment": "Club (FSCA) ring card — a Finnish Spitz exhibitor's cheat sheet for the whole event. myBreeds is the priority list (Finnish Spitz first, always highlighted); add breeds here if you're also showing them. No 'otherBreeds' / cross-breed clash machinery. Groups are NOT filtered so the full end-of-day order shows for both Regular and Owner-Handled, with the group(s) your breeds are in highlighted. Pair with template-club.html.",
+  "show": {
+    "eyebrow": "Finnish Spitz · Ring Card"
+  },
+  "myBreeds": ["Finnish Spitz"],
+  "otherBreeds": [],
+  "clashes": [],
+  "estimates": {"minPerDog": 2.5, "minPerGroup": 20}
+}

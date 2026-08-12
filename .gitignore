@@ -13,6 +13,9 @@ national-card.html
 akc-events.ics
 site/
 sync.log
+# generated ring cards + their manifest (rebuilt each sync from ringcard/)
+ringcards/
+ringcards-manifest.json
 
 # Python
 __pycache__/

@@ -1,3 +1,5 @@
 requests>=2.31
 # only needed for the `gcal` / `sync` subcommands (push to Google Calendar):
 google-auth>=2.30
+# only needed for `ringcards` (parse Onofrio judging-program PDFs -> ring card):
+pdfplumber>=0.11

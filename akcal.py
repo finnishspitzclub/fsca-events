@@ -52,6 +52,9 @@ DB_PATH = Path(__file__).with_name("events.db")
 ICS_PATH = Path(__file__).with_name("akc-events.ics")
 MAP_PATH = Path(__file__).with_name("events-map.html")
 NATIONAL_PATH = Path(__file__).with_name("national-card.html")
+RINGCARD_DIR = Path(__file__).with_name("ringcard")            # vendored generator
+RINGCARDS_OUT = Path(__file__).with_name("ringcards")          # generated cards
+RINGCARD_MANIFEST = Path(__file__).with_name("ringcards-manifest.json")
 
 # The FSCA National Specialty has no distinct row in the AKC feed - it's held in
 # conjunction with a cluster. Point this at the anchor event (e.g. the breed/group
@@ -1150,6 +1153,11 @@ def cmd_sync(args):
     cmd_gcal(argparse.Namespace(calendar=args.calendar, dry_run=args.dry_run,
                                 no_prune=args.no_prune))
     if not args.dry_run:
+        print("== ring cards (Onofrio judging programs) ==")
+        try:
+            cmd_ringcards(argparse.Namespace(out=None))
+        except Exception as e:              # never let a ring-card hiccup break the sync
+            print("ringcards: step failed (continuing):", e)
         print("== regenerate map ==")
         cmd_map(argparse.Namespace(month=None, months=1, out=None))
         print("== national specialty card ==")
@@ -1442,6 +1450,8 @@ def render_map_html(events, title, subtitle, national_no=""):
   .csum{font-size:.85rem;color:#333;margin:0 0 4px}
   .clkey{font-size:.76rem;color:#5a6572;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:8px;padding:8px 11px;margin:14px 0 0;line-height:1.5}
   .csum a{color:#0b5cad}
+  .rcardbtn{display:inline-block;margin:2px 0 8px;background:linear-gradient(135deg,#7a2e12,#a3431c);color:#fff;font-weight:700;font-size:.85rem;text-decoration:none;padding:8px 13px;border-radius:8px;box-shadow:0 1px 3px #0003}
+  .rcardbtn:hover{filter:brightness(1.07)}
   .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0}
   .showcard h3{margin:0 0 4px;font-size:.96rem}
   .showcard .meta{font-size:.83rem;line-height:1.45;color:#333}
@@ -1716,6 +1726,7 @@ function openDetail(c){
   let html='<div class="dhead"><button class="back" id="dback">‹ Back</button>'+
     '<h2>'+(c.high_value?'★ ':'')+esc(c.n>1?(c.venue||c.label):c.label)+'<br><span class="sub">'+esc(c.dates)+' · '+esc(c.tzLabel)+' time</span></h2></div>'+
     '<div class="body"><p class="csum">'+(mapLink?('📍 '+mapLink+' · '):'')+c.n+' show'+(c.n===1?'':'s')+' at this site</p>'+
+    (c.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(c.rcard)+'">🎯 Finnish Spitz ring card — when &amp; where FS shows, per day →</a>':'')+
     c.shows.map((s,i)=>showCard(s,i)).join('')+
     (c.shows.some(s=>s.clcy)?'<p class="clkey"><b>Reading the Finnish Spitz count:</b> total – class dogs – class bitches (champion dogs – champion bitches) veterans. Hover the number for the plain-English breakdown.</p>':'')+
     '</div>';
@@ -1763,6 +1774,59 @@ openFromHash();
                .replace("__DATA__", data))
 
 
+def cmd_ringcards(args):
+    """Generate Finnish Spitz ring cards for shows with an ONOFRIO judging
+    program. One card per unique program (keyBinary), shared across the shows
+    that reference it; writes ringcards/<kb>.html and a manifest mapping each
+    show's event_no -> its card. Uses the vendored ringcard/ pipeline
+    (parse.py + render.js). Non-Onofrio supers and parse failures are skipped,
+    so the card only appears where we can actually produce a good one."""
+    import subprocess, tempfile
+    conn = db()
+    rows = conn.execute(
+        "SELECT event_no, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
+    conn.close()
+
+    programs = {}   # keyBinary -> {event_no} — Onofrio judging programs only
+    for r in rows:
+        if "onofrio" not in (r["superint"] or "").lower():
+            continue
+        for d in json.loads(r["documents"] or "[]"):
+            if d.get("code") == "JDGPRO" and d.get("keyBinary"):
+                programs.setdefault(d["keyBinary"], set()).add(str(r["event_no"]))
+
+    out_dir = Path(args.out) if getattr(args, "out", None) else RINGCARDS_OUT
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest, made, failed = {}, 0, 0
+    for kb, event_nos in sorted(programs.items()):
+        with tempfile.TemporaryDirectory() as td:
+            pdf, ij = Path(td) / f"{kb}.pdf", Path(td) / f"{kb}.json"
+            # onofrio.com's TLS/SNI defeats urllib/requests here; curl handles it
+            subprocess.run(["curl", "-sL", "--max-time", "120", "-o", str(pdf),
+                            "-H", "Referer: https://webapps.akc.org/event-search/",
+                            DOC_URL.format(kb)], capture_output=True)
+            if not pdf.exists() or pdf.stat().st_size < 1000 or pdf.read_bytes()[:5] != b"%PDF-":
+                print(f"ringcard: kb{kb} download failed — skipped"); failed += 1; continue
+            p = subprocess.run([sys.executable, "parse.py", str(pdf), "-o", str(ij)],
+                               cwd=str(RINGCARD_DIR), capture_output=True, text=True)
+            if p.returncode != 0:
+                tail = ((p.stderr or "").strip().splitlines() or [""])[-1]
+                print(f"ringcard: kb{kb} parse failed — skipped ({tail[:70]})"); failed += 1; continue
+            html = out_dir / f"{kb}.html"
+            r2 = subprocess.run(["node", "render.js", "-i", str(ij),
+                                 "-w", "fsca-weekend.json", "-t", "template-club.html",
+                                 "-o", str(html)],
+                                cwd=str(RINGCARD_DIR), capture_output=True, text=True)
+            if r2.returncode != 0 or not html.exists():
+                print(f"ringcard: kb{kb} render failed — {(r2.stderr or '').strip()[:70]}"); failed += 1; continue
+            made += 1
+            for eno in event_nos:
+                manifest[eno] = f"ringcards/{kb}.html"
+    RINGCARD_MANIFEST.write_text(json.dumps(manifest), encoding="utf-8")
+    print(f"ringcards: {made} card(s), {failed} skipped, {len(manifest)} shows mapped "
+          f"(of {len(programs)} Onofrio programs)")
+
+
 def cmd_map(args):
     # The whole store is baked in; the page windows it client-side against the
     # viewer's own "today", so the map/list stay correct between regenerations
@@ -1772,6 +1836,19 @@ def cmd_map(args):
     rows = conn.execute("SELECT * FROM events ORDER BY start_date").fetchall()
     conn.close()
     clusters = cluster_events(rows)
+    # Attach ring-card links (generated separately by cmd_ringcards). A cluster
+    # gets a card if any of its shows' event_no is in the manifest.
+    if RINGCARD_MANIFEST.exists():
+        try:
+            rcmap = json.loads(RINGCARD_MANIFEST.read_text(encoding="utf-8"))
+        except Exception:
+            rcmap = {}
+        for c in clusters:
+            for s in c["shows"]:
+                u = rcmap.get(str(s["event_no"]))
+                if u:
+                    c["rcard"] = u
+                    break
     shows = sum(c["n"] for c in clusters)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
     title = "Finnish Spitz — AKC Events"
@@ -2000,6 +2077,9 @@ def main():
     n.add_argument("--event", help=f"anchor event number (default {NATIONAL_EVENT_NO})")
     n.add_argument("--out", help=f"output path (default {NATIONAL_PATH.name})")
 
+    rc = sub.add_parser("ringcards", help="generate FS ring cards for Onofrio judging programs")
+    rc.add_argument("--out", help=f"output dir (default {RINGCARDS_OUT.name}/)")
+
     sy = sub.add_parser("sync", help="fetch a rolling window then push to Google Calendar")
     sy.add_argument("--state", action="append", metavar="XX",
                     help=f"state to query; repeatable. default: {FETCH_STATES}")
@@ -2015,7 +2095,7 @@ def main():
     args = p.parse_args()
     {"probe": cmd_probe, "fetch": cmd_fetch, "ics": cmd_ics, "show": cmd_show,
      "gcal": cmd_gcal, "sync": cmd_sync, "map": cmd_map,
-     "national": cmd_national}[args.cmd](args)
+     "national": cmd_national, "ringcards": cmd_ringcards}[args.cmd](args)
 
 
 if __name__ == "__main__":

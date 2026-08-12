@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ring-card/schemas/intermediate.schema.json",
+  "title": "Ring Card intermediate program",
+  "description": "The contract between the extractor (parse.py) and the renderer (render.js). Faithful extract of one judging program. Everything here is a FACT read off the PDF. Derived values (estimated times, clash flags) are NOT stored here — the renderer computes them from slotMin + ahead + weekend.json estimates so retuning re-derives everything.",
+  "type": "object",
+  "required": ["show", "days"],
+  "additionalProperties": false,
+  "properties": {
+    "show": {
+      "type": "object",
+      "required": ["club", "dates", "venue", "super"],
+      "additionalProperties": true,
+      "properties": {
+        "club": {"type": "string"},
+        "dates": {"type": "string"},
+        "venue": {"type": "string"},
+        "super": {"type": "string", "description": "Superintendent, e.g. 'Onofrio'"}
+      }
+    },
+    "days": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["date", "label", "entries", "groups"],
+        "additionalProperties": false,
+        "properties": {
+          "date": {"type": "string", "description": "ISO date, e.g. 2026-07-10"},
+          "label": {"type": "string", "description": "Weekday, e.g. Friday"},
+          "entries": {
+            "type": "array",
+            "description": "Every breed judged that day, in program order within each ring/time-block. The renderer filters to the breeds named in weekend.json.",
+            "items": {"$ref": "#/definitions/entry"}
+          },
+          "groups": {
+            "type": "object",
+            "required": ["regular", "nohs"],
+            "additionalProperties": false,
+            "properties": {
+              "regular": {"$ref": "#/definitions/groupBlock"},
+              "nohs": {"$ref": "#/definitions/groupBlock"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "entry": {
+      "type": "object",
+      "required": ["breed", "ring", "judge", "slotTime", "slotMin", "ahead", "entryCount"],
+      "additionalProperties": false,
+      "properties": {
+        "breed": {"type": "string", "description": "Breed name exactly as printed, e.g. 'Finnish Spitz'"},
+        "ring": {"type": "integer", "description": "Physical ring number from the ring-detail header (NOT the alphabetical summary)"},
+        "judge": {"type": "string", "description": "Judge from the ring-detail header (already reflects substitutions)"},
+        "slotTime": {"type": "string", "description": "Printed time-block heading, e.g. '10:50a'"},
+        "slotMin": {"type": "integer", "description": "slotTime as minutes since midnight, e.g. 650"},
+        "ahead": {"type": "integer", "description": "Sum of dogs in the same ring+time-block listed BEFORE this breed. 0 = first in the block."},
+        "prevBreed": {"type": ["string", "null"], "description": "Breed immediately before this one in the block (the ringside cue). null if first."},
+        "prevN": {"type": ["integer", "null"], "description": "Entry count of prevBreed. null if first."},
+        "entryCount": {"type": "integer", "description": "Dogs entered in this breed"},
+        "split": {"type": ["string", "null"], "description": "Regular Dogs-Bitches-BOB(d)-BOB(b), e.g. '0-0-2-0'. null when not printed (e.g. puppy/junior)."},
+        "puppy": {"type": "boolean", "default": false, "description": "4-6mo Beginner Puppy or similar side event"},
+        "flags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Parser confidence notes, e.g. 'low-confidence-time'. Present only when the extractor was unsure — tells the human which fields to check by hand."
+        }
+      }
+    },
+    "groupBlock": {
+      "type": "object",
+      "required": ["start", "order"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {"type": ["string", "null"], "description": "Printed group start time, e.g. '2:45p'"},
+        "startMin": {"type": ["integer", "null"]},
+        "order": {
+          "type": "array",
+          "description": "Groups in printed order. Position in this array is the group's running order (1st, 2nd, ...).",
+          "items": {
+            "type": "object",
+            "required": ["group", "judge"],
+            "additionalProperties": false,
+            "properties": {
+              "group": {"type": "string", "description": "e.g. 'Herding'"},
+              "judge": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

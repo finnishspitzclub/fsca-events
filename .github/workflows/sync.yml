@@ -31,6 +31,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Node runs the ring-card renderer (ringcard/render.js) during sync.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install deps
         run: pip install -r requirements.txt
 
@@ -50,9 +55,12 @@ jobs:
 
       - name: Assemble Pages site
         run: |
-          mkdir -p site
+          mkdir -p site site/ringcards
           cp events-map.html site/index.html
           cp national-card.html site/national.html
+          # Finnish Spitz ring cards (generated for Onofrio judging programs);
+          # the copy is best-effort — there may be none in a given window.
+          cp ringcards/*.html site/ringcards/ 2>/dev/null || echo "no ring cards this run"
 
       - uses: actions/configure-pages@v5
 
