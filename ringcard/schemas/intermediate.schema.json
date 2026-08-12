@@ -76,7 +76,8 @@
       "properties": {
         "start": {"type": ["string", "null"], "description": "Printed group start time, e.g. '2:45p'"},
         "startMin": {"type": ["integer", "null"]},
-        "ring": {"type": ["integer", "null"], "description": "Physical ring the group judging runs in. Regular and NOHS groups usually share one ring; mirrored across if only one side prints it."},
+        "ring": {"type": ["integer", "null"], "description": "Physical ring the group judging runs in. Regular and NOHS each get their own — often different rings."},
+        "follows": {"type": "boolean", "description": "NOHS-only: true when timing is 'Immediately following each Regular Variety Group' rather than a printed clock time."},
         "order": {
           "type": "array",
           "description": "Groups in printed order. Position in this array is the group's running order (1st, 2nd, ...).",

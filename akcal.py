@@ -1474,12 +1474,11 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
   .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;flex-direction:column;gap:8px}
   .showgroups .gbody{display:flex;gap:11px;align-items:stretch}
-  .showgroups .ghdr{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-  .gchip{font-size:.68rem;color:#5a4d40;background:#fff;border:1px solid #f0d9c4;border-radius:5px;padding:2px 7px;white-space:nowrap}
-  .gchip b{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;font-weight:700;color:#7a2e12;margin-right:4px;letter-spacing:.02em}
-  .gchip.early{border-color:#c65a2e;background:#fdeee6}
-  .gwarn{flex-basis:100%;font-size:.72rem;font-weight:600;color:#7a2e12;background:rgba(198,90,46,.12);border:1px solid #eabfa8;border-radius:6px;padding:4px 8px}
-  .gwarn b{font-weight:800}
+  .showgroups .ghdr{display:flex;flex-direction:column;gap:4px}
+  .gsess{font-size:.72rem;color:#6b5d50;background:#fff;border:1px solid #f0d9c4;border-radius:6px;padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gsess.first{color:#5a4d40;font-weight:600;border-color:#d9b48f;background:#fff3e8}
+  .gsl{display:inline-block;box-sizing:border-box;min-width:46px;text-align:center;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.56rem;font-weight:700;color:#7a2e12;background:#f0d9c4;border-radius:3px;padding:1px 5px;margin-right:6px;vertical-align:middle;letter-spacing:.02em}
+  .gnote{font-size:.66rem;color:#a08b78;font-style:italic;margin-top:1px;white-space:normal;line-height:1.3}
   .showgroups .gorder{flex:0 0 158px}
   .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font-size:.76rem;color:#6b5d50;padding:1.5px 0}
   .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12}
@@ -1787,21 +1786,28 @@ function showCard(s,i){
     if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
     if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
     if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
-    // Group-timing header: Regular vs NOHS ring + start. NOHS routinely runs
-    // BEFORE Regular (AKC recommends >=30 min earlier) and it's easy to catch
-    // Regular and miss NOHS entirely — so when NOHS is earlier, call it out.
-    function gchip(lab,ring,time,cls){
-      if(ring==null && !time) return '';
-      var b=[]; if(ring!=null)b.push('Ring '+ring); if(time)b.push(time);
-      return '<span class="gchip '+cls+'"><b>'+lab+'</b>'+esc(b.join(' · '))+'</span>';
+    // Group-timing header: Regular and Owner-Handled (NOHS) each run in their own
+    // ring, and NOHS often starts BEFORE Regular (or "follows each Regular group").
+    // List whichever runs first on top, so the order reads chronologically. Times
+    // are program-printed and can change day-of ("unless otherwise announced").
+    var sess=[];
+    if(rc.gring!=null||rc.gstart)
+      sess.push({lab:'Reg',ring:rc.gring,time:rc.gstart,min:(rc.gmin!=null?rc.gmin:1e9)});
+    if(rc.nring!=null||rc.ntime||rc.nfollows)
+      sess.push({lab:'NOHS',ring:rc.nring,
+                 time:(rc.ntime||(rc.nfollows?'follows each Regular group':'')),
+                 min:(rc.nmin!=null?rc.nmin:1e9)});
+    sess.sort(function(a,b){return a.min-b.min;});
+    var ghdr='';
+    if(sess.length){
+      var rows=sess.map(function(x,ix){
+        var p=[]; if(x.ring!=null)p.push('Ring '+x.ring); if(x.time)p.push(x.time);
+        return '<div class="gsess'+(ix===0?' first':'')+'"><span class="gsl">'+esc(x.lab)+'</span>'+esc(p.join(' · '))+'</div>';
+      }).join('');
+      ghdr='<div class="ghdr">'+rows+'</div>';
     }
-    var nearly=(rc.nmin!=null&&rc.gmin!=null&&rc.nmin<rc.gmin);
-    var ghdr='', rchip=gchip('REG',rc.gring,rc.gstart,''), nchip=gchip('NOHS',rc.nring,rc.ntime,nearly?'early':'');
-    if(rchip||nchip){
-      var warn=nearly?'<div class="gwarn">⚠ Owner-Handled groups run <b>before</b> Regular — be at '+(rc.nring!=null?'Ring '+rc.nring:'the group ring')+(rc.ntime?' by '+esc(rc.ntime):'')+'</div>':'';
-      ghdr='<div class="ghdr">'+rchip+nchip+warn+'</div>';
-    }
-    if(seq||gl||ghdr)grouppanel='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div></div>';
+    var gnote=sess.length?'<div class="gnote">Program order — may change day-of (“unless otherwise announced”)</div>':'';
+    if(seq||gl||ghdr)grouppanel='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>'+gnote+'</div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
@@ -1975,7 +1981,8 @@ def cmd_ringcards(args):
                             "nohs": nohs, "gstart": reg.get("start"), "gmin": startMin,
                             "gring": reg.get("ring"),
                             "ntime": nohsblk.get("start"), "nmin": nohsblk.get("startMin"),
-                            "nring": nohsblk.get("ring"), "gseq": gseq}
+                            "nring": nohsblk.get("ring"), "nfollows": bool(nohsblk.get("follows")),
+                            "gseq": gseq}
             made += 1
             for eno, edate in event_nos.items():
                 manifest[eno] = {"card": f"ringcards/{kb}.html", "fs": fs_by_date.get(edate)}

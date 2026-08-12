@@ -298,8 +298,8 @@ def reconcile_with_index(entries, index_rows, day_i):
 
 def parse_day_stream(stream):
     entries = []
-    groups = {"regular": {"start": None, "startMin": None, "ring": None, "order": []},
-              "nohs": {"start": None, "startMin": None, "ring": None, "order": []}}
+    groups = {"regular": {"start": None, "startMin": None, "ring": None, "follows": False, "order": []},
+              "nohs": {"start": None, "startMin": None, "ring": None, "follows": False, "order": []}}
 
     cur_ring = None
     cur_judge = None
@@ -314,7 +314,7 @@ def parse_day_stream(stream):
     # start listing them with no header. So a bare "X GROUP - JUDGE" line defaults
     # to Regular; only NOHS / Bred-by / Puppy sections have to announce themselves.
     group_ctx = None         # None(->regular) | 'nohs' | 'bred'
-    grp_ring = None          # a RING number seen inside the group region
+    prev_ring = None         # ring number if the PREVIOUS line was a bare "RING N"
     where = None             # (page, col) of the previous line
     anchored = False         # have we seen a RING/time in THIS column yet?
 
@@ -328,12 +328,26 @@ def parse_day_stream(stream):
         if gh:
             u = gh.group(0).upper()
             group_ctx = "nohs" if "NOHS" in u else ("bred" if "BRED" in u else "regular")
-            # a group ring printed just before this header belongs to this block
-            # (Onofrio often prints one shared "RING N" between the Regular and
-            # NOHS blocks, right before the NOHS header)
-            if group_ctx in ("regular", "nohs") and grp_ring is not None \
+            # the "RING N" printed on the line immediately before a group header is
+            # THAT block's ring. Regular and NOHS get their own — often DIFFERENT
+            # rings (e.g. Regular Ring 2 / NOHS Ring 4), so never mirror one onto
+            # the other.
+            if group_ctx in ("regular", "nohs") and prev_ring is not None \
                     and groups[group_ctx]["ring"] is None:
-                groups[group_ctx]["ring"] = grp_ring
+                groups[group_ctx]["ring"] = prev_ring
+            prev_ring = None
+            continue
+
+        # remember a bare "RING N" so the NEXT line (a group header) can claim it
+        rm = RING_RE.match(line)
+        prev_ring = int(rm.group(1)) if rm else None
+
+        # NOHS timing is sometimes a phrase, not a clock: "Immediately following
+        # each Regular Variety Group." Flag it so the card can say "follows Regular"
+        # instead of a start time.
+        low = line.lower()
+        if group_ctx == "nohs" and "follow" in low and "regular" in low:
+            groups["nohs"]["follows"] = True
             continue
 
         gm = GROUP_RE.match(line)
@@ -346,11 +360,13 @@ def parse_day_stream(stream):
                     dst.append({"group": name, "judge": titlecase_judge(gm.group(2))})
             continue
 
-        rm = RING_RE.match(line)
         if rm:
             cur_ring = int(rm.group(1))
-            if group_ctx is not None:   # a RING inside the end-of-day group region
-                grp_ring = cur_ring
+            # a RING printed right AFTER a group header (before its order) is also
+            # that block's ring
+            if group_ctx in ("regular", "nohs") and groups[group_ctx]["ring"] is None \
+                    and not groups[group_ctx]["order"]:
+                groups[group_ctx]["ring"] = cur_ring
             need_judge = True
             anchored = True
             continue
@@ -367,13 +383,11 @@ def parse_day_stream(stream):
             prev_n = None
             anchored = True
             # first time-line after a group header is that block's start time
-            # (works for both Regular and NOHS — NOHS often runs 30 min earlier)
+            # (works for both Regular and NOHS — NOHS often runs earlier)
             lane = group_ctx if group_ctx in ("regular", "nohs") else None
             if lane and not groups[lane]["order"] and groups[lane]["start"] is None:
                 groups[lane]["start"] = cur_time
                 groups[lane]["startMin"] = cur_min
-                if groups[lane]["ring"] is None and grp_ring is not None:
-                    groups[lane]["ring"] = grp_ring
             continue
 
         bm = BREED_RE.match(line)
@@ -403,12 +417,6 @@ def parse_day_stream(stream):
             cur_judge = titlecase_judge(line)
             need_judge = False
             continue
-
-    # Regular and NOHS group judging usually share one physical ring; if only one
-    # block printed the ring number, mirror it onto the other.
-    for a, b in (("regular", "nohs"), ("nohs", "regular")):
-        if groups[a]["ring"] is None and groups[b]["ring"] is not None:
-            groups[a]["ring"] = groups[b]["ring"]
 
     return entries, groups
 
