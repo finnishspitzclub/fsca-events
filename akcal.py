@@ -1474,8 +1474,8 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
   .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;flex-direction:column;gap:8px}
   .showgroups .gbody{display:flex;gap:11px;align-items:stretch}
-  .showgroups .ghdr{display:flex;flex-direction:column;gap:4px}
-  .gsess{font-size:.72rem;color:#6b5d50;background:#fff;border:1px solid #f0d9c4;border-radius:6px;padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .showgroups .ghdr{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+  .gsess{font-size:.72rem;color:#6b5d50;background:#fff;border:1px solid #f0d9c4;border-radius:6px;padding:3px 8px;white-space:nowrap}
   .gsess.first{color:#5a4d40;font-weight:600;border-color:#d9b48f;background:#fff3e8}
   .gsl{display:inline-block;box-sizing:border-box;min-width:46px;text-align:center;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.56rem;font-weight:700;color:#7a2e12;background:#f0d9c4;border-radius:3px;padding:1px 5px;margin-right:6px;vertical-align:middle;letter-spacing:.02em}
   .gnote{font-size:.66rem;color:#a08b78;font-style:italic;margin-top:1px;white-space:normal;line-height:1.3}
