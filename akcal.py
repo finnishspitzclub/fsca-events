@@ -1464,6 +1464,13 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
   .showring .srf{font-size:.66rem;color:#b09a86;margin-top:7px;font-style:italic}
+  .showring .srj{font-size:.82rem;color:#4a3f36;margin-top:2px;font-weight:600}
+  .showring .srgrp{margin-top:8px;padding-top:7px;border-top:1px solid #f0d9c4}
+  .showring .srgh{font-size:.64rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#a3431c;margin-bottom:4px}
+  .showring .srgl{font-size:.8rem;color:#4a3f36;line-height:1.65}
+  .showring .grl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 4px;border-radius:3px;margin-right:4px}
+  .showring .grl.n{background:#7a2e12;color:#fff} .showring .grl.b{background:#5b4a3d;color:#fff}
+  .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
   .jsrc{color:#9aa5b1;font-weight:400;font-size:.9em}
   .showcard h3{margin:0 0 4px;font-size:.96rem}
   .showcard .meta{font-size:.83rem;line-height:1.45;color:#333}
@@ -1709,33 +1716,51 @@ function dlIcs(s,c){
 }
 let CUR=null;
 function showCard(s,i){
+  // Lifecycle-aware: the card adapts to what's known. Before entries close it's
+  // an entry-planning view; after close, the deadline stuff falls away; once the
+  // judging program exists it becomes a day-of view and the judges move into the
+  // ring panel (tied to the ring). Judges ALWAYS come from AKC; the program only
+  // supplies ring / time / running order / this-year count.
+  const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const prog=!!s.rc;
+  const closed=s.close && pd(s.close) < today;
   const m=[];
   m.push('<b>'+esc(s.dates)+'</b>'+(s.comp_type?' · '+esc(s.comp_type):''));
-  const j=[];
-  if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(s.breed_judge));}
-  else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
-  var nohsj=s.nohs_judge||(s.rc&&s.rc.nohs)||'';
-  if(nohsj)j.push('<b>NOHS Group:</b> '+esc(nohsj)+((!s.nohs_judge&&s.rc&&s.rc.nohs)?' <span class="jsrc">(from program)</span>':''));
-  if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
-  if(j.length)m.push('Judges — '+j.join(' · '));
-  if(s.fee)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
-  if(s.open||s.close)m.push('<b>Entries:</b> '+(s.open?('open '+esc(s.open)):'')+(s.open&&s.close?' · ':'')+(s.close?('close '+esc(s.close)):''));
+  if(!prog){
+    const j=[];
+    if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(s.breed_judge));}
+    else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
+    if(s.nohs_judge)j.push('<b>NOHS Group:</b> '+esc(s.nohs_judge));
+    if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
+    if(j.length)m.push('Judges — '+j.join(' · '));
+  }
+  if(s.fee && !prog)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
+  if(closed){ if(s.close)m.push('<span class="eclosed">Entries closed '+esc(s.close)+'</span>'); }
+  else if(s.open||s.close){ m.push('<b>Entries:</b> '+(s.open?('open '+esc(s.open)):'')+(s.open&&s.close?' · ':'')+(s.close?('close '+esc(s.close)):'')); }
   if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
-  if(s.online)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
-  if(s.clcy)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
+  if(s.online && !closed)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
+  if(s.clcy && !prog)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
-  var rc=s.rc, ringpanel='';
-  if(rc){
+  var ringpanel='';
+  if(prog){
+    var rc=s.rc;
     var order = rc.ahead>0
       ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
       : '<b>first</b> in the ring';
+    var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'';
+    var glines='';
+    if(reg)glines+='<div class="srgl"><span class="grl">Reg</span> '+esc(reg)+'</div>';
+    if(oh)glines+='<div class="srgl"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
+    if(s.bis_judge)glines+='<div class="srgl"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
     ringpanel='<div class="showring"><div class="srh">🎯 Finnish Spitz · day of</div>'+
       '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
+      (s.breed_judge?'<div class="srj">'+esc(s.breed_judge)+'</div>':'')+
       '<div class="sra">'+order+'</div>'+
       (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> entered this year'+(rc.split?' <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
-      '<div class="srf">from the judging program</div></div>';
+      (glines?('<div class="srgrp"><div class="srgh">End-of-day · Non-Sporting</div>'+glines+'</div>'):'')+
+      '<div class="srf">ring &amp; order from program · judges from AKC</div></div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
