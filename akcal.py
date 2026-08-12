@@ -1809,9 +1809,33 @@ def cmd_ringcards(args):
                 print(f"ringcard: kb{kb} download failed — skipped"); failed += 1; continue
             p = subprocess.run([sys.executable, "parse.py", str(pdf), "-o", str(ij)],
                                cwd=str(RINGCARD_DIR), capture_output=True, text=True)
+            if not ij.exists():         # extractor crashed / superintendent not detected
+                print(f"ringcard: kb{kb} not parseable — skipped"); failed += 1; continue
+            try:
+                inter = json.loads(ij.read_text(encoding="utf-8"))
+            except Exception:
+                print(f"ringcard: kb{kb} bad JSON — skipped"); failed += 1; continue
+            # parse.py writes the JSON even when validation fails (rc != 0). For
+            # this automated pipeline (no human to hand-fix flags), drop the
+            # un-placeable entries so a program that DOES have Finnish Spitz still
+            # yields a card even when non-FS breeds orphaned. FS's own numbers
+            # (ahead etc.) were computed during extraction, so dropping other
+            # rows afterward doesn't affect them.
             if p.returncode != 0:
-                tail = ((p.stderr or "").strip().splitlines() or [""])[-1]
-                print(f"ringcard: kb{kb} parse failed — skipped ({tail[:70]})"); failed += 1; continue
+                for d in inter.get("days", []):
+                    d["entries"] = [e for e in d.get("entries", [])
+                                    if isinstance(e.get("ring"), int)
+                                    and e.get("slotMin") is not None
+                                    and e.get("ahead") is not None
+                                    and e.get("entryCount") is not None]
+                ij.write_text(json.dumps(inter), encoding="utf-8")
+            # Only make a card when Finnish Spitz is actually entered and placeable
+            # — no point generating an empty "no FS scheduled" card.
+            has_fs = any("finnish spitz" in (e.get("breed") or "").lower()
+                         and isinstance(e.get("ring"), int)
+                         for d in inter.get("days", []) for e in d.get("entries", []))
+            if not has_fs:
+                print(f"ringcard: kb{kb} no Finnish Spitz entered — skipped"); failed += 1; continue
             html = out_dir / f"{kb}.html"
             r2 = subprocess.run(["node", "render.js", "-i", str(ij),
                                  "-w", "fsca-weekend.json", "-t", "template-club.html",
