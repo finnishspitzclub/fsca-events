@@ -1178,6 +1178,35 @@ def _month_bounds(today, months=1):
     return first, date(y, m, 1) - timedelta(days=1)
 
 
+# AKC serves each event document (premium list, judging program, entry form)
+# from its own document server, keyed by the `keyBinary` id in the feed's
+# documents[] array — no scraping needed. URL pattern lifted from the AKC
+# event-search app's own bundle.
+DOC_URL = ("https://www.apps.akc.org/apps/eventplans/eventsearch/blocks/"
+           "dsp_generate_pdf.cfm?KEY_BINARY_CONTENT={}")
+DOC_LABEL = {"PRMLST": "Premium list", "JDGPRO": "Judging program",
+             "ENTFRM": "Entry form", "EVNINF": "Event info"}
+
+
+def _docs(js):
+    """Parse the stored documents JSON into [{label, code, url}] for the UI."""
+    if not js:
+        return []
+    try:
+        arr = json.loads(js)
+    except Exception:
+        return []
+    out = []
+    for d in arr:
+        kb = d.get("keyBinary")
+        if kb is None:
+            continue
+        code = (d.get("code") or "").strip()
+        out.append({"label": DOC_LABEL.get(code, d.get("name") or "Document"),
+                    "code": code, "url": DOC_URL.format(kb)})
+    return out
+
+
 def _span_label(sd, ed):
     """Human date/date-range with weekday, e.g. 'Wed Aug 5 - Sun Aug 9, 2026'."""
     def one(d):
@@ -1232,6 +1261,7 @@ def cluster_events(rows):
             "bis_judge": _col(r, "bis_judge") or "",
             "clcy": _col(r, "completed_last_year") or "",
             "clcy_tip": _clcy_tip(_col(r, "completed_last_year") or ""),
+            "docs": _docs(_col(r, "documents")),
             "_venue": r["venue"] or "", "_city": r["city"] or "",
             "_state": r["state"] or "", "_lat": lat, "_lon": lon,
         })
@@ -1280,6 +1310,15 @@ def _make_cluster(c):
         mm = re.match(r"\s*(\d+)", str(m["clcy"] or ""))
         if mm and (fs_last is None or int(mm.group(1)) > fs_last):
             fs_last, fs_last_tip = int(mm.group(1)), _clcy_tip(m["clcy"])
+    # Unique documents across the site's shows, ordered premium/program/entry/info.
+    _dord = {"PRMLST": 0, "JDGPRO": 1, "ENTFRM": 2, "EVNINF": 3}
+    cdocs, seen = [], set()
+    for m in members:
+        for d in m.get("docs", []):
+            if d["url"] in seen:
+                continue
+            seen.add(d["url"]); cdocs.append(d)
+    cdocs.sort(key=lambda d: _dord.get(d["code"], 9))
     return {
         "start": minstart.isoformat(), "end": maxend.isoformat(), "dates": dates,
         "tz": tz, "tzLabel": TZ_LABEL.get(tz, "—"), "color": _hex_for(m0["_state"]),
@@ -1291,6 +1330,7 @@ def _make_cluster(c):
         "pended": any(m["pended"] for m in members),
         "close": closes[0] if closes else "",
         "fs_last": fs_last, "fs_last_tip": fs_last_tip,
+        "docs": cdocs,
         "event_no": m0["event_no"],
         "shows": shows,
     }
@@ -1384,6 +1424,10 @@ def render_map_html(events, title, subtitle, national_no=""):
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
   .fsnone{color:#c2c8d0}
+  .docs .doc{text-decoration:none;font-size:1.02rem;margin-right:3px;line-height:1}
+  .docs .doc:hover{filter:brightness(1.15)}
+  .doclink{color:#0b5cad;text-decoration:none;white-space:nowrap}
+  .doclink:hover{text-decoration:underline}
   #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:826px}
   .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
@@ -1441,7 +1485,7 @@ def render_map_html(events, title, subtitle, national_no=""):
     <table>
       <thead><tr>
         <th>Dates</th><th>Show(s)</th><th>Location</th><th>Zone</th>
-        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th></th>
+        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / judging program / entry form — direct PDFs from AKC">Docs</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -1457,6 +1501,10 @@ const AKC='https://www.apps.akc.org/apps/events/search/index_results.cfm?action=
 const MAPS='https://www.google.com/maps/search/?api=1&query=';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fmtFee(v){const f=parseFloat(v);return isNaN(f)?esc(v):'$'+f.toFixed(2).replace(/\.00$/,'');}
+function docIcon(code){return code==='PRMLST'?'📄':code==='JDGPRO'?'📋':code==='ENTFRM'?'📝':'ℹ️';}
+function docIcons(docs){return (docs||[]).map(d=>'<a class="doc" target="_blank" rel="noopener" title="'+esc(d.label)+' — PDF from AKC" href="'+esc(d.url)+'">'+docIcon(d.code)+'</a>').join('');}
+function docIconsByType(docs){var seen={},out=[];(docs||[]).forEach(function(d){if(!seen[d.code]){seen[d.code]=1;out.push(d);}});return docIcons(out);}
+function docLinks(docs){return (docs||[]).map(d=>'<a class="doclink" target="_blank" rel="noopener" href="'+esc(d.url)+'">'+docIcon(d.code)+' '+esc(d.label)+'</a>').join(' · ');}
 function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 function ymd(s){return String(s).replace(/-/g,'');}
 function plusDay(s){const d=pd(s);d.setDate(d.getDate()+1);return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
@@ -1482,7 +1530,22 @@ stateBtn.addEventListener('click',function(e){e.stopPropagation();statePanel.hid
 statePanel.addEventListener('change',function(e){var cb=e.target;if(cb&&cb.matches&&cb.matches('input[type=checkbox]')){if(cb.checked)selStates.add(cb.value);else selStates.delete(cb.value);updateStateBtn();renderAll(true);}});
 document.addEventListener('click',function(e){if(!e.target.closest('#stateDD'))statePanel.hidden=true;});
 clearBtn.addEventListener('click',function(){selZones.clear();selStates.clear();q.value='';fHv.checked=false;fWin.value='60';[...zoneWrap.querySelectorAll('.zchip')].forEach(function(b){b.classList.remove('on');});buildStatePanel();updateStateBtn();statePanel.hidden=true;renderAll(true);});
-buildStatePanel();updateStateBtn();
+// Persist the filter set across visits (per browser) so a planner's view sticks.
+function saveFilters(){try{localStorage.setItem('fsca_filters',JSON.stringify({q:q.value,win:fWin.value,hv:fHv.checked,zones:[...selZones],states:[...selStates]}));}catch(e){}}
+function loadFilters(){
+  var f=null;try{f=JSON.parse(localStorage.getItem('fsca_filters')||'null');}catch(e){}
+  if(f){
+    if(typeof f.q==='string')q.value=f.q;
+    if(f.win)fWin.value=f.win;
+    if(typeof f.hv==='boolean')fHv.checked=f.hv;
+    (f.zones||[]).forEach(z=>selZones.add(z));
+    (f.states||[]).forEach(s=>selStates.add(s));
+    [...zoneWrap.querySelectorAll('.zchip')].forEach(function(b){if(selZones.has(b.dataset.tz))b.classList.add('on');});
+    syncStatesToZones();
+  }
+  buildStatePanel();updateStateBtn();
+}
+loadFilters();
 let shown=[];
 function baseMatch(c){
   const term=q.value.trim().toLowerCase(),hv=fHv.checked;
@@ -1529,6 +1592,7 @@ function render(refit){
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
       '<td style="text-align:center;white-space:nowrap"'+(c.fs_last_tip?' title="'+esc(c.fs_last_tip)+'"':'')+'>'+(c.fs_last!=null?'<b>'+c.fs_last+'</b>':'<span class="fsnone">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+esc(c.close)+'</td>'+
+      '<td class="docs" style="white-space:nowrap">'+docIconsByType(c.docs)+'</td>'+
       '<td class="chev">&rsaquo;</td></tr>';
   }).join('');
   countEl.textContent=shown.length+' listing'+(shown.length===1?'':'s')+' · '+shows+' show'+(shows===1?'':'s');
@@ -1578,7 +1642,7 @@ function renderCal(){
   calGrid.innerHTML=h;
   if(calGrid._mk!==mk){calGrid.classList.remove('fade');void calGrid.offsetWidth;calGrid.classList.add('fade');calGrid._mk=mk;}
 }
-function renderAll(refit){render(refit);renderCal();}
+function renderAll(refit){saveFilters();render(refit);renderCal();}
 function highlight(ai){
   document.querySelectorAll('.sel').forEach(e=>e.classList.remove('sel'));
   document.querySelectorAll('[data-ai="'+ai+'"]').forEach(e=>e.classList.add('sel'));
@@ -1586,7 +1650,7 @@ function highlight(ai){
   const mk=markerByAi[ai];
   if(mk){try{mk.setStyle({radius:10,weight:3,color:'#0f2b46'});mk.openTooltip();map.panTo(mk.getLatLng());}catch(_){}SELMK=mk;}
 }
-rowsEl.addEventListener('click',e=>{const tr=e.target.closest('tr[data-ai]');if(tr)openDetail(ALL[+tr.dataset.ai]);});
+rowsEl.addEventListener('click',e=>{if(e.target.closest('a'))return;const tr=e.target.closest('tr[data-ai]');if(tr)openDetail(ALL[+tr.dataset.ai]);});
 calGrid.addEventListener('click',e=>{const b=e.target.closest('.calbar[data-ai]');if(b)openDetail(ALL[+b.dataset.ai]);});
 calPrev.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);renderCal();});
 calNext.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);renderCal();});
@@ -1632,6 +1696,7 @@ function showCard(s,i){
   if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
   if(s.online)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
   if(s.clcy)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
+  if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
   return '<div class="showcard"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
@@ -1767,6 +1832,9 @@ def _natl_shell(inner):
         ".sec{margin-top:16px}"
         ".sec h3{margin:0 0 7px;font-size:1rem;color:#7a2e12}"
         ".sec p{margin:0;line-height:1.55}"
+        ".docrow{margin-top:8px;font-size:.92rem;display:flex;flex-wrap:wrap;gap:4px 14px}"
+        ".docrow a{color:#0b5cad;text-decoration:none}"
+        ".docrow a:hover{text-decoration:underline}"
         ".jr{margin:0 0 9px;font-size:.9rem;line-height:1.45}"
         ".jr .jd{font-weight:700;color:#5b4a3d}"
         ".foot{margin:18px 0 0;font-size:.78rem;color:#9a8a7a}"
@@ -1834,6 +1902,16 @@ def render_national_html(cluster):
                f'shows last year: {entered}. The National typically draws more from across the country.'
                f'</p></div>') if clcy else ""
 
+    _dicon = {"PRMLST": "\U0001F4C4", "JDGPRO": "\U0001F4CB",
+              "ENTFRM": "\U0001F4DD", "EVNINF": "ℹ"}
+    docs_html = ""
+    if cluster.get("docs"):
+        _links = " · ".join(
+            '<a href="{}" target="_blank" rel="noopener">{} {}</a>'.format(
+                _h(d["url"]), _dicon.get(d["code"], "\U0001F4C4"), _h(d["label"]))
+            for d in cluster["docs"])
+        docs_html = '<div class="docrow">' + _links + '</div>'
+
     inner = f'''<div class="hdr">
   <div class="lbl">FSCA National Specialty</div>
   <div class="ttl">{year} National Specialty</div>
@@ -1849,7 +1927,7 @@ def render_national_html(cluster):
       </div>
       <p class="lede">The club’s premier event of the year — the one weekend the breed community gathers from across the country.</p>
       <div class="cta"><a class="btn" href="{gcal}" target="_blank" rel="noopener">＋ Add to your calendar</a></div>
-      <div class="sec"><h3>Entries &amp; premium</h3><p>{entline}</p></div>
+      <div class="sec"><h3>Entries &amp; premium</h3><p>{entline}</p>{docs_html}</div>
       {turnout}
     </div>
     <div>
