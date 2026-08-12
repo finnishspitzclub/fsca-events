@@ -46,14 +46,37 @@ def titlecase_judge(name: str) -> str:
 
 
 # ---- page -> column-ordered lines ---------------------------------------
-def page_lines(page, body_top=185):
+def _is_content(s):
+    """A columnar body line: a RING header, a bare time, or an 'N Breed d-d-d-d'
+    line. Used to find where the header/intro ends — NOT a fixed y-cutoff, because
+    a continuation page's content starts high (right under a 2-line header) while a
+    day's first page carries a tall intro paragraph before its first ring."""
+    s = s.strip()
+    return bool(RING_RE.match(s) or TIME_RE.match(s) or BREED_RE.match(s))
+
+
+def page_lines(page):
     """Return lines in newspaper reading order: left column then right column.
 
-    Each line is (col, text). Words above `body_top` (page header / intro
-    paragraph that spans both columns) are skipped.
+    Each line is (col, text). The page header (club/day) and any first-page
+    intro paragraph are skipped by locating the first real content line rather
+    than assuming a fixed header height — so a breed that continues at the top of
+    a column (e.g. a 1:45p strand carried over from the previous page) is kept.
     """
+    from itertools import groupby
     mid = page.width / 2
-    words = [w for w in page.extract_words() if w["top"] > body_top]
+    allw = page.extract_words()
+    allw.sort(key=lambda w: (round(w["top"] / 2) * 2, w["x0"]))
+    # first visual line (either column) that looks like content -> body starts there
+    body_top = 0
+    for key, grp in groupby(allw, key=lambda w: round(w["top"] / 2) * 2):
+        grp = list(grp)
+        left = " ".join(w["text"] for w in grp if w["x0"] < mid)
+        right = " ".join(w["text"] for w in grp if w["x0"] >= mid)
+        if _is_content(left) or _is_content(right):
+            body_top = key - 2
+            break
+    words = [w for w in allw if w["top"] >= body_top]
     out = []
     for col in (0, 1):
         cw = [w for w in words if (w["x0"] < mid) == (col == 0)]
