@@ -1266,6 +1266,7 @@ def cluster_events(rows):
             "supt_email": _col(r, "supt_email") or "",
             "breed_judge": _col(r, "breed_judge") or "",
             "group_judge": _col(r, "group_judge") or "",
+            "nohs_judge": _col(r, "nohs_group_judge") or "",
             "bis_judge": _col(r, "bis_judge") or "",
             "clcy": _col(r, "completed_last_year") or "",
             "clcy_tip": _clcy_tip(_col(r, "completed_last_year") or ""),
@@ -1452,7 +1453,18 @@ def render_map_html(events, title, subtitle, national_no=""):
   .csum a{color:#0b5cad}
   .rcardbtn{display:inline-block;margin:2px 0 8px;background:linear-gradient(135deg,#7a2e12,#a3431c);color:#fff;font-weight:700;font-size:.85rem;text-decoration:none;padding:8px 13px;border-radius:8px;box-shadow:0 1px 3px #0003}
   .rcardbtn:hover{filter:brightness(1.07)}
-  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0}
+  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .showmain{flex:1 1 300px;min-width:0}
+  .showring{flex:0 0 208px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:9px 11px;align-self:stretch}
+  .showring .srh{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#a3431c;margin-bottom:6px}
+  .showring .srbig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .showring .srring{font-size:1.05rem;font-weight:800;color:#7a2e12}
+  .showring .srt{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;color:#7a2e12;font-size:.95rem}
+  .showring .sra{font-size:.79rem;color:#6b5d50;margin-top:5px;line-height:1.4} .showring .sra b{color:#7a2e12}
+  .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
+  .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
+  .showring .srf{font-size:.66rem;color:#b09a86;margin-top:7px;font-style:italic}
+  .jsrc{color:#9aa5b1;font-weight:400;font-size:.9em}
   .showcard h3{margin:0 0 4px;font-size:.96rem}
   .showcard .meta{font-size:.83rem;line-height:1.45;color:#333}
   .showcard .meta b{color:#111}
@@ -1700,8 +1712,10 @@ function showCard(s,i){
   const m=[];
   m.push('<b>'+esc(s.dates)+'</b>'+(s.comp_type?' · '+esc(s.comp_type):''));
   const j=[];
-  if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed & Group:</b> '+esc(s.breed_judge));}
+  if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(s.breed_judge));}
   else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
+  var nohsj=s.nohs_judge||(s.rc&&s.rc.nohs)||'';
+  if(nohsj)j.push('<b>NOHS Group:</b> '+esc(nohsj)+((!s.nohs_judge&&s.rc&&s.rc.nohs)?' <span class="jsrc">(from program)</span>':''));
   if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
   if(j.length)m.push('Judges — '+j.join(' · '));
   if(s.fee)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
@@ -1712,9 +1726,20 @@ function showCard(s,i){
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
-  return '<div class="showcard"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
+  var rc=s.rc, ringpanel='';
+  if(rc){
+    var order = rc.ahead>0
+      ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
+      : '<b>first</b> in the ring';
+    ringpanel='<div class="showring"><div class="srh">🎯 Finnish Spitz · day of</div>'+
+      '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
+      '<div class="sra">'+order+'</div>'+
+      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> entered this year'+(rc.split?' <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
+      '<div class="srf">from the judging program</div></div>';
+  }
+  return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
-    '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>';
+    '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>'+ringpanel+'</div>';
 }
 function openDetail(c){
   if(!c)return;
@@ -1784,16 +1809,16 @@ def cmd_ringcards(args):
     import subprocess, tempfile
     conn = db()
     rows = conn.execute(
-        "SELECT event_no, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
+        "SELECT event_no, start_date, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
     conn.close()
 
-    programs = {}   # keyBinary -> {event_no} — Onofrio judging programs only
+    programs = {}   # keyBinary -> {event_no: start_date} — Onofrio judging programs only
     for r in rows:
         if "onofrio" not in (r["superint"] or "").lower():
             continue
         for d in json.loads(r["documents"] or "[]"):
             if d.get("code") == "JDGPRO" and d.get("keyBinary"):
-                programs.setdefault(d["keyBinary"], set()).add(str(r["event_no"]))
+                programs.setdefault(d["keyBinary"], {})[str(r["event_no"])] = r["start_date"]
 
     out_dir = Path(args.out) if getattr(args, "out", None) else RINGCARDS_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1843,9 +1868,30 @@ def cmd_ringcards(args):
                                 cwd=str(RINGCARD_DIR), capture_output=True, text=True)
             if r2.returncode != 0 or not html.exists():
                 print(f"ringcard: kb{kb} render failed — {(r2.stderr or '').strip()[:70]}"); failed += 1; continue
+            # Per-day FS ring info so the dashboard can show a "ring of the day"
+            # panel inline. Deliberately NOT the judge — the AKC feed already gives
+            # us breed/group/BIS judges (more reliable); the judging program's
+            # unique value is ring, time, running order and this-year's count.
+            fs_by_date = {}
+            for d in inter.get("days", []):
+                # the program's Owner-Handled (NOHS) Non-Sporting group judge for
+                # this day — a fallback for the card when AKC doesn't provide it
+                nohs = ""
+                for g in (((d.get("groups") or {}).get("nohs") or {}).get("order") or []):
+                    if "non-sporting" in (g.get("group") or "").lower():
+                        nohs = g.get("judge") or ""
+                        break
+                for e in d.get("entries", []):
+                    if "finnish spitz" in (e.get("breed") or "").lower() and isinstance(e.get("ring"), int):
+                        fs_by_date[d.get("date")] = {
+                            "ring": e.get("ring"), "time": e.get("slotTime"),
+                            "ahead": e.get("ahead") or 0, "count": e.get("entryCount"),
+                            "split": e.get("split") or "",
+                            "prev": e.get("prevBreed"), "prevN": e.get("prevN"),
+                            "nohs": nohs}
             made += 1
-            for eno in event_nos:
-                manifest[eno] = f"ringcards/{kb}.html"
+            for eno, edate in event_nos.items():
+                manifest[eno] = {"card": f"ringcards/{kb}.html", "fs": fs_by_date.get(edate)}
     RINGCARD_MANIFEST.write_text(json.dumps(manifest), encoding="utf-8")
     print(f"ringcards: {made} card(s), {failed} skipped, {len(manifest)} shows mapped "
           f"(of {len(programs)} Onofrio programs)")
@@ -1869,10 +1915,14 @@ def cmd_map(args):
             rcmap = {}
         for c in clusters:
             for s in c["shows"]:
-                u = rcmap.get(str(s["event_no"]))
-                if u:
-                    c["rcard"] = u
-                    break
+                e = rcmap.get(str(s["event_no"]))
+                if not e:
+                    continue
+                card = e.get("card") if isinstance(e, dict) else e   # dict now; str = legacy
+                if card:
+                    c["rcard"] = card
+                if isinstance(e, dict) and e.get("fs"):
+                    s["rc"] = e["fs"]                                 # per-day FS ring info
     shows = sum(c["n"] for c in clusters)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
     title = "Finnish Spitz — AKC Events"
