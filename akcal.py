@@ -1233,6 +1233,18 @@ def _span_label(sd, ed):
     return f"{one(sd)} – {one(ed)}, {ed.year}"
 
 
+def _short_supt(name):
+    """Trim a superintendent name to a compact label for the list column, e.g.
+    'Onofrio Dog Shows, LLC' -> 'Onofrio', 'MB-F Inc.' -> 'MB-F',
+    'BaRay Event Services' -> 'BaRay', 'Jim Rau Dog Shows, LLC' -> 'Jim Rau'."""
+    n = (name or "").strip()
+    if not n:
+        return ""
+    short = re.split(r",|\bDog Shows\b|\bEvent Services\b|\bDog Show\b|\bInc\.?|\bL\.?L\.?C\.?\b",
+                     n, maxsplit=1, flags=re.I)[0].strip(" ,.")
+    return short or n
+
+
 def cluster_events(rows):
     """Group AKC shows into site clusters for the map and list.
 
@@ -1315,6 +1327,7 @@ def _make_cluster(c):
     clubs = list(dict.fromkeys(m["club"] for m in members))
     label = clubs[0] if len(clubs) == 1 else (m0["_venue"] or m0["_city"] or "Show cluster")
     dates = _span_label(minstart, maxend)
+    supts = list(dict.fromkeys(_short_supt(m["superint"]) for m in members if m["superint"]))
     closes = sorted(m["close"] for m in members if m["close"])
     shows = [{k: v for k, v in m.items()
               if not k.startswith("_") and k not in ("site", "sd", "ed")}
@@ -1342,6 +1355,7 @@ def _make_cluster(c):
         "where": ", ".join(x for x in (m0["_city"], m0["_state"]) if x),
         "lat": m0["_lat"], "lon": m0["_lon"],
         "label": label, "clubs": clubs, "n": len(members),
+        "superint": supts[0] if supts else "", "supts": supts,
         "high_value": any(m["high_value"] for m in members),
         "pended": any(m["pended"] for m in members),
         "close": closes[0] if closes else "",
@@ -1441,6 +1455,14 @@ def render_map_html(events, title, subtitle, national_no=""):
   .nsub{font-size:.72rem;color:#667;font-weight:400}
   .fsnone{color:#c2c8d0}
   .shcell{max-width:340px}
+  .supt{white-space:nowrap;font-size:.86rem;color:#4a5568;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+  mark{background:#fff2a8;color:inherit;border-radius:2px;padding:0 1px}
+  .jhit{color:#1f2937}
+  .jrole{display:inline-block;font-size:.6rem;font-weight:700;color:#5b3a8a;background:#ede4fb;border-radius:3px;padding:0 4px;margin-left:3px;vertical-align:middle}
+  .enterchip{display:inline-block;font-size:.66rem;font-weight:700;color:#1d6b1d !important;background:#dcf2dc;border-radius:8px;padding:1px 6px;margin-left:4px;text-decoration:none;white-space:nowrap}
+  .enterchip:hover{background:#c8ecc8;text-decoration:none !important}
+  .enterlink{display:inline-block;font-weight:700;color:#1d6b1d !important;background:#dcf2dc;border-radius:6px;padding:2px 9px;text-decoration:none !important}
+  .enterlink:hover{background:#c8ecc8}
   .docs .doc{text-decoration:none;font-size:1.02rem;margin-right:3px;line-height:1}
   .docs .doc:hover{filter:brightness(1.15)}
   .doclink{color:#0b5cad;text-decoration:none;white-space:nowrap}
@@ -1533,7 +1555,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Dates</th><th>Show(s)</th><th>Location</th><th>Zone</th>
+        <th>Dates</th><th>Show(s)</th><th>Location</th><th id="supthdr" title="Superintendent — search a judge's name to swap this to the matched judge">Superintendent</th><th>Zone</th>
         <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -1556,6 +1578,16 @@ function docIconsByType(docs){var seen={},out=[];(docs||[]).forEach(function(d){
 function docCell(docs,codes){return docIconsByType((docs||[]).filter(function(d){return codes.indexOf(d.code)>=0;}));}
 function docLinks(docs){return (docs||[]).map(d=>'<a class="doclink" target="_blank" rel="noopener" href="'+esc(d.url)+'">'+docIcon(d.code)+' '+esc(d.label)+'</a>').join(' · ');}
 function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+// Highlight every occurrence of an already-lowercased search term in text.
+function hl(text,term){var s=String(text==null?'':text);if(!term)return esc(s);var i=s.toLowerCase().indexOf(term);if(i<0)return esc(s);return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+term.length))+'</mark>'+hl(s.slice(i+term.length),term);}
+const JROLES=[['breed_judge','Breed'],['group_judge','Group'],['nohs_judge','NOHS'],['bis_judge','BIS']];
+function judgeHay(c){return (c.shows||[]).map(function(s){return JROLES.map(function(r){return s[r[0]]||'';}).join(' ');}).join(' ');}
+// First judge (by role priority) across a cluster's shows whose name contains term.
+function judgeMatch(c,term){if(!term)return null;var sh=c.shows||[];for(var r=0;r<JROLES.length;r++)for(var i=0;i<sh.length;i++){var v=sh[i][JROLES[r][0]]||'';if(v.toLowerCase().indexOf(term)>=0)return {name:v,role:JROLES[r][1]};}return null;}
+const ENTER_ONOFRIO='https://www.onofrio.com/cgi-bin/db2www/showentry/enter';
+function isOnofrio(s){return /onofrio/i.test((s&&s.superint)||'');}
+function entriesOpen(s){if(!s||!s.close)return false;const t=new Date(),today=new Date(t.getFullYear(),t.getMonth(),t.getDate());return pd(s.close)>=today;}
+function onofrioOpen(c){return (c.shows||[]).some(function(s){return isOnofrio(s)&&entriesOpen(s);});}
 function ymd(s){return String(s).replace(/-/g,'');}
 function plusDay(s){const d=pd(s);d.setDate(d.getDate()+1);return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');}
 const map=L.map('map',{scrollWheelZoom:true}).setView([39.5,-98.35],4);
@@ -1602,7 +1634,7 @@ function baseMatch(c){
   if(selStates.size&&!selStates.has(c.state))return false;
   if(selZones.size&&!selZones.has(c.tz))return false;
   if(hv&&!c.high_value)return false;
-  if(term&&!((c.label+' '+c.venue+' '+c.city+' '+c.state+' '+c.clubs.join(' ')).toLowerCase().includes(term)))return false;
+  if(term&&!((c.label+' '+c.venue+' '+c.city+' '+c.state+' '+c.clubs.join(' ')+' '+(c.supts||[]).join(' ')+' '+judgeHay(c)).toLowerCase().includes(term)))return false;
   return true;
 }
 function filtered(){
@@ -1630,15 +1662,23 @@ function render(refit){
     markers.addLayer(m); markerByAi[AIDX.get(c)]=m;
   });
   if(refit&&latlngs.length){try{map.fitBounds(latlngs,{maxZoom:7,padding:[24,24]});}catch(_){}}
-  let shows=0;
+  let shows=0;const term=q.value.trim().toLowerCase();let anyJudge=false;
   rowsEl.innerHTML=shown.map(c=>{
     shows+=c.n;
     const loc=[c.city,c.state].filter(Boolean).join(', ');
-    const name=c.n>1?(esc(c.label)+' <span class="nsub">+ '+(c.n-1)+' more show'+(c.n-1===1?'':'s')+'</span>'):esc(c.label);
+    const name=c.n>1?(hl(c.label,term)+' <span class="nsub">+ '+(c.n-1)+' more show'+(c.n-1===1?'':'s')+'</span>'):hl(c.label,term);
     const tags=(c.high_value?' <span class="tag hv">★</span>':'')+(c.pended?' <span class="tag pend">PENDED</span>':'');
+    const enter=onofrioOpen(c)?' <a class="enterchip" target="_blank" rel="noopener" title="Enter online at Onofrio — entries open" href="'+ENTER_ONOFRIO+'" onclick="event.stopPropagation()">Enter ↗</a>':'';
+    // Swappable column: the matched judge (name + role, highlighted) when the
+    // search hit a judge, else the superintendent.
+    const jm=judgeMatch(c,term);if(jm)anyJudge=true;
+    const swap=jm
+      ? '<span class="jhit">'+hl(jm.name,term)+' <span class="jrole">'+jm.role+'</span></span>'
+      : (c.superint?hl(c.superint,term):'<span class="fsnone">—</span>');
     return '<tr data-ai="'+AIDX.get(c)+'"><td style="white-space:nowrap">'+esc(c.dates)+'</td>'+
-      '<td class="shcell">'+name+tags+'</td>'+
-      '<td style="white-space:nowrap">'+esc(loc)+'</td>'+
+      '<td class="shcell">'+name+tags+enter+'</td>'+
+      '<td style="white-space:nowrap">'+hl(loc,term)+'</td>'+
+      '<td class="supt">'+swap+'</td>'+
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
       '<td style="text-align:center;white-space:nowrap"'+(c.fs_last_tip?' title="'+esc(c.fs_last_tip)+'"':'')+'>'+(c.fs_last!=null?'<b>'+c.fs_last+'</b>':'<span class="fsnone">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+esc(c.close)+'</td>'+
@@ -1646,6 +1686,7 @@ function render(refit){
       '<td class="docs" style="white-space:nowrap">'+docCell(c.docs,['JDGPRO'])+'</td>'+
       '<td class="chev">&rsaquo;</td></tr>';
   }).join('');
+  var sh=document.getElementById('supthdr');if(sh)sh.textContent=anyJudge?'Judge':'Superintendent';
   countEl.textContent=shown.length+' listing'+(shown.length===1?'':'s')+' · '+shows+' show'+(shows===1?'':'s');
   emptyEl.style.display=shown.length?'none':'block';
 }
@@ -1758,6 +1799,7 @@ function showCard(s,i){
   else if(s.open||s.close){ m.push('<b>Entries:</b> '+(s.open?('open '+esc(s.open)):'')+(s.open&&s.close?' · ':'')+(s.close?('close '+esc(s.close)):'')); }
   if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
   if(s.online && !closed)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
+  if(isOnofrio(s)&&entriesOpen(s))m.push('<a class="enterlink" target="_blank" rel="noopener" href="'+ENTER_ONOFRIO+'">🖊 Enter at Onofrio →</a>');
   if(s.clcy && !prog)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
