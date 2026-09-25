@@ -62,6 +62,11 @@ RINGCARD_MANIFEST = Path(__file__).with_name("ringcards-manifest.json")
 # One value to update per year. Overridable via the workflow env.
 NATIONAL_EVENT_NO = os.environ.get("AKCAL_NATIONAL_EVENT", "2026746503")
 
+# The National promo (events-page ★ button + the embedded national-card iframe)
+# only surfaces from this many days before the National through its end date, then
+# hides itself until next year's anchor comes back into range. "A month or two."
+NATIONAL_LEAD_DAYS = int(os.environ.get("AKCAL_NATIONAL_LEAD_DAYS", "60"))
+
 REQUEST_DELAY = 2.0                  # seconds between calls
 POST_TIMEOUT = 90                    # server took 26s for a 1yr CO query; 30 is too tight
 MAX_RETRIES = 3
@@ -1275,6 +1280,7 @@ def cluster_events(rows):
             "event_no": r["event_no"],
             "comp_type": r["comp_type"] or "",
             "high_value": bool(_col(r, "high_value")),
+            "specialty": _col(r, "specialty") or "",
             "pended": _col(r, "status") == "Pended",
             "close": r["close_date"] or "",
             "open": _col(r, "open_date") or "",
@@ -1366,6 +1372,28 @@ def _make_cluster(c):
     }
 
 
+def national_cluster(clusters, anchor=NATIONAL_EVENT_NO):
+    """The cluster the National anchor lands in, or None if it isn't in the feed."""
+    if not anchor:
+        return None
+    return next((c for c in clusters
+                 if any(str(s["event_no"]) == str(anchor) for s in c["shows"])), None)
+
+
+def national_in_window(cluster, today=None):
+    """True when the National should be promoted: from NATIONAL_LEAD_DAYS before its
+    start through its end date. False when it's too far out, already past, or the
+    anchor isn't in the store yet (no date to gate on)."""
+    if not cluster:
+        return False
+    start = _parse_date(cluster["start"])
+    if not start:
+        return False
+    end = _parse_date(cluster["end"]) or start
+    today = today or date.today()
+    return (start - timedelta(days=NATIONAL_LEAD_DAYS)) <= today <= end
+
+
 def render_map_html(events, title, subtitle, national_no=""):
     """Self-contained page: a Leaflet map + a filterable table, both driven by one
     baked-in dataset the browser filters by a rolling date window (from the
@@ -1420,7 +1448,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .lg i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid #0003}
   .pop b{font-size:.95rem} .pop{font-size:.82rem;line-height:1.35}
   .pop .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px}
-  .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000}
+  .pop .pend{background:#ffe0b2;color:#8a4b00} .pop .hv{background:#ffcdd2;color:#8a0000} .pop .natl{background:#7a2e12;color:#fff}
   .pop a{color:#0b5cad}
   .filters{padding:11px 14px;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid #d3dbe4;border-bottom:1px solid #d3dbe4;background:#e7edf3;position:relative;z-index:30}
   .zones{display:inline-flex;gap:4px;flex-wrap:wrap}
@@ -1447,7 +1475,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .fade{animation:fadein .18s ease}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid #0003;margin-right:5px;vertical-align:middle}
   .tag{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 5px;border-radius:8px}
-  .pend{background:#ffe0b2;color:#8a4b00} .hv{background:#ffcdd2;color:#8a0000}
+  .pend{background:#ffe0b2;color:#8a4b00} .hv{background:#ffcdd2;color:#8a0000} .natl{background:#7a2e12;color:#fff}
   td a{color:#0b5cad;text-decoration:none} td a:hover{text-decoration:underline}
   .empty{padding:20px;text-align:center;color:#777}
   tbody tr{cursor:pointer}
@@ -1568,6 +1596,16 @@ def render_map_html(events, title, subtitle, national_no=""):
 <script>
 const ALL = __DATA__;
 const NATL = "__NATL__";
+// The ★ is reserved for the National Specialty. Everything else that's notable
+// (a limited-breed group specialty like Non-Sporting) gets a labeled tag instead,
+// so a normal specialty weekend never looks like the National.
+function isNatlShow(s){return NATL&&String(s.event_no)===String(NATL);}
+function isNatl(c){return NATL&&c.shows&&c.shows.some(isNatlShow);}
+function specLabel(spec){
+  const base=String(spec||'').replace(/\s*group(\s*show)?\s*$/i,'').trim();
+  return base?base+' specialty':'Group specialty';
+}
+function clusterSpecTag(c){const s=(c.shows||[]).find(x=>x.high_value&&x.specialty);return specLabel(s&&s.specialty);}
 const AKC='https://www.apps.akc.org/apps/events/search/index_results.cfm?action=plan&event_number=';
 const MAPS='https://www.google.com/maps/search/?api=1&query=';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -1657,7 +1695,7 @@ function render(refit){
     const n=(seen[k]=(seen[k]||0)+1)-1,off=n?(n*0.02):0,ll=[c.lat+off,c.lon+off];
     latlngs.push(ll);
     const m=L.circleMarker(ll,{radius:7,color:'#fff',weight:1.5,fillColor:c.color,fillOpacity:.95});
-    m.bindTooltip((c.high_value?'★ ':'')+c.label+(c.n>1?(' (+'+(c.n-1)+' more)'):''));
+    m.bindTooltip((isNatl(c)?'★ ':'')+c.label+(c.n>1?(' (+'+(c.n-1)+' more)'):''));
     m.on('click',()=>openDetail(c));
     markers.addLayer(m); markerByAi[AIDX.get(c)]=m;
   });
@@ -1667,7 +1705,7 @@ function render(refit){
     shows+=c.n;
     const loc=[c.city,c.state].filter(Boolean).join(', ');
     const name=c.n>1?(hl(c.label,term)+' <span class="nsub">+ '+(c.n-1)+' more show'+(c.n-1===1?'':'s')+'</span>'):hl(c.label,term);
-    const tags=(c.high_value?' <span class="tag hv">★</span>':'')+(c.pended?' <span class="tag pend">PENDED</span>':'');
+    const tags=(isNatl(c)?' <span class="tag natl">★ National Specialty</span>':(c.high_value?' <span class="tag hv">'+esc(clusterSpecTag(c))+'</span>':''))+(c.pended?' <span class="tag pend">PENDED</span>':'');
     const enter=onofrioOpen(c)?' <a class="enterchip" target="_blank" rel="noopener" title="Enter online at Onofrio — entries open" href="'+ENTER_ONOFRIO+'" onclick="event.stopPropagation()">Enter ↗</a>':'';
     // Swappable column: the matched judge (name + role, highlighted) when the
     // search hit a judge, else the superintendent.
@@ -1725,7 +1763,7 @@ function renderCal(){
     bars.forEach(b=>{
       if(b.lane>=MAXL){for(let d=b.s;d<=b.e;d++)ov[d]=(ov[d]||0)+1;return;}
       const left=(b.s/7*100),width=((b.e-b.s+1)/7*100);
-      bh+='<button class="calbar'+(b.oth?' oth':'')+'" data-ai="'+AIDX.get(b.c)+'" title="'+esc(b.c.label)+' — '+esc(b.c.dates)+'" style="left:calc('+left.toFixed(3)+'% + 2px);width:calc('+width.toFixed(3)+'% - 4px);top:'+(20+b.lane*17)+'px;background:'+esc(b.c.color)+'">'+(b.c.high_value?'★ ':'')+(b.cont?'‹ ':'')+esc(b.c.label)+'</button>';
+      bh+='<button class="calbar'+(b.oth?' oth':'')+'" data-ai="'+AIDX.get(b.c)+'" title="'+esc(b.c.label)+' — '+esc(b.c.dates)+'" style="left:calc('+left.toFixed(3)+'% + 2px);width:calc('+width.toFixed(3)+'% - 4px);top:'+(20+b.lane*17)+'px;background:'+esc(b.c.color)+'">'+(isNatl(b.c)?'★ ':'')+(b.cont?'‹ ':'')+esc(b.c.label)+'</button>';
     });
     for(const d in ov)bh+='<span class="cmore" style="position:absolute;left:calc('+(d/7*100).toFixed(3)+'% + 3px);top:'+(20+MAXL*17)+'px">+'+ov[d]+'</span>';
     h+='<div class="calwk">'+cells+bh+'</div>';
@@ -1803,7 +1841,7 @@ function showCard(s,i){
   if(s.clcy && !prog)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
-  const tags=(s.high_value?' <span class="tag hv">★</span>':'')+(s.pended?' <span class="tag pend">PENDED</span>':'');
+  const tags=(isNatlShow(s)?' <span class="tag natl">★ National Specialty</span>':(s.high_value?' <span class="tag hv">'+esc(specLabel(s.specialty))+'</span>':''))+(s.pended?' <span class="tag pend">PENDED</span>':'');
   var ringpanel='', grouppanel='';
   if(prog){
     var rc=s.rc;
@@ -1863,7 +1901,7 @@ function openDetail(c){
   const loc=[c.venue,c.where].filter(Boolean).join(', ');
   const mapLink=loc?'<a target="_blank" rel="noopener" href="'+MAPS+encodeURIComponent(loc)+'">'+esc(loc)+' ↗</a>':'';
   let html='<div class="dhead"><button class="back" id="dback">‹ Back</button>'+
-    '<h2>'+(c.high_value?'★ ':'')+esc(c.n>1?(c.venue||c.label):c.label)+'<br><span class="sub">'+esc(c.dates)+' · '+esc(c.tzLabel)+' time</span></h2></div>'+
+    '<h2>'+(isNatl(c)?'★ ':'')+esc(c.n>1?(c.venue||c.label):c.label)+'<br><span class="sub">'+esc(c.dates)+' · '+esc(c.tzLabel)+' time</span></h2></div>'+
     '<div class="body"><p class="csum">'+(mapLink?('📍 '+mapLink+' · '):'')+c.n+' show'+(c.n===1?'':'s')+' at this site</p>'+
     (c.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(c.rcard)+'">🎯 Finnish Spitz ring card — when &amp; where FS shows, per day →</a>':'')+
     c.shows.map((s,i)=>showCard(s,i)).join('')+
@@ -2062,10 +2100,14 @@ def cmd_map(args):
     shows = sum(c["n"] for c in clusters)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
     title = "Finnish Spitz — AKC Events"
+    # The National ★ button only rides along within its promo window (see
+    # national_in_window); otherwise national_no is blank and nothing is marked.
+    natl_no = NATIONAL_EVENT_NO if national_in_window(national_cluster(clusters)) else ""
+    tail = "tap the ★ National Specialty button · " if natl_no else ""
     subtitle = (f"{shows} shows at {len(clusters)} sites · filter & click any show below · "
-                f"tap the ★ button for the National Specialty · updated {updated}")
+                f"{tail}updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
-    out.write_text(render_map_html(clusters, title, subtitle, NATIONAL_EVENT_NO), encoding="utf-8")
+    out.write_text(render_map_html(clusters, title, subtitle, natl_no), encoding="utf-8")
     print(f"wrote {out}  ({len(clusters)} clusters / {shows} shows)")
 
 
@@ -2230,16 +2272,30 @@ def render_national_html(cluster):
     return _natl_shell(inner)
 
 
+def _natl_hidden_html():
+    """Empty, self-collapsing document for when the National is out of its promo
+    window — the embedded iframe then renders nothing on the page."""
+    return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            '<style>html,body{margin:0;padding:0;height:0;overflow:hidden}</style>\n'
+            '</head>\n<body></body>\n</html>\n')
+
+
 def cmd_national(args):
     conn = db()
     rows = conn.execute("SELECT * FROM events ORDER BY start_date").fetchall()
     conn.close()
     anchor = getattr(args, "event", None) or NATIONAL_EVENT_NO
+    manual = bool(getattr(args, "event", None))    # explicit --event always renders
     target = next((c for c in cluster_events(rows)
                    if any(s["event_no"] == anchor for s in c["shows"])), None)
     out = Path(args.out) if getattr(args, "out", None) else NATIONAL_PATH
-    out.write_text(render_national_html(target), encoding="utf-8")
-    if target:
+    show = manual or national_in_window(target)
+    out.write_text(render_national_html(target) if show else _natl_hidden_html(),
+                   encoding="utf-8")
+    if not show:
+        why = "past or >%d days out" % NATIONAL_LEAD_DAYS if target else "anchor not in store"
+        print(f"wrote {out}  (National hidden — {why})")
+    elif target:
         print(f"wrote {out}  (national: {target['dates']} {target['where']}, {target['n']} shows)")
     else:
         print(f"wrote {out}  (anchor {anchor} not in store - placeholder)")
