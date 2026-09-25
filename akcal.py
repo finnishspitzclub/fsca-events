@@ -718,6 +718,28 @@ def _parse_date(v):
     return None
 
 
+def _spec_label(spec):
+    """'Non-Sporting Group' -> 'Non-Sporting specialty' (mirrors the map's JS)."""
+    base = re.sub(r"\s*group(\s*show)?\s*$", "", str(spec or ""), flags=re.I).strip()
+    return f"{base} specialty" if base else "Group specialty"
+
+
+def _cal_summary(r):
+    """Calendar title for one show. ★ is reserved for the National Specialty; a
+    limited-breed group specialty gets a text label instead so it never reads as
+    the National. Keeps the [PENDED] suffix."""
+    name = r["club"] or "Unknown club"
+    if r["comp_type"]:
+        name += f" ({r['comp_type']})"
+    if str(r["event_no"]) == str(NATIONAL_EVENT_NO):
+        name = "★ National Specialty — " + name
+    elif bool(_col(r, "high_value")):
+        name = f"{_spec_label(_col(r, 'specialty'))} — " + name
+    if _col(r, "status") == "Pended":
+        name += " [PENDED]"
+    return name
+
+
 def cmd_ics(args):
     conn = db()
     rows = conn.execute(
@@ -750,14 +772,7 @@ def cmd_ics(args):
         pended = _col(r, "status") == "Pended"
         high_value = bool(_col(r, "high_value"))
 
-        title = f"{r['club'] or 'Unknown club'}"
-        if r["comp_type"]:
-            title += f" ({r['comp_type']})"
-        # LB + group specialty is the reason to prioritize a weekend; mark it.
-        if high_value:
-            title = "★ " + title
-        if pended:
-            title += " [PENDED]"
+        title = _cal_summary(r)
         where = ", ".join(x for x in (r["city"], r["state"]) if x)
 
         desc_bits = [f"AKC event #{r['event_no']}"]
@@ -903,13 +918,7 @@ def _gcal_text(r):
     high_value = bool(_col(r, "high_value"))
     tzlabel = TZ_LABEL.get(_tz(r["state"]))
 
-    summary = r["club"] or "Unknown club"
-    if r["comp_type"]:
-        summary += f" ({r['comp_type']})"
-    if high_value:
-        summary = "★ " + summary
-    if pended:
-        summary += " [PENDED]"
+    summary = _cal_summary(r)
 
     where = ", ".join(x for x in (r["city"], r["state"]) if x)
     location = r["venue"] or where
