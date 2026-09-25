@@ -1,0 +1,57 @@
+<!-- ===========================================================================
+     FSCA National Specialty — self-gating home-page banner
+     ---------------------------------------------------------------------------
+     Paste this whole block into a Clubistry *custom-HTML / embed* block on the
+     home page (one that allows <script>, not the plain text/rich-text block).
+
+     It shows the banner ONLY from LEAD_DAYS before the National through its end
+     date, then hides itself completely (display:none — no blank strip). Update
+     the five CONFIG values once a year when the new National dates are known;
+     that's the same yearly touch as AKCAL_NATIONAL_EVENT in the events tool.
+     =========================================================================== -->
+<div id="fsca-natl-banner" style="display:none">
+  <a class="fnb-inner" href="/events">
+    <span class="fnb-icon" aria-hidden="true">&#128197;</span>
+    <span class="fnb-text">
+      <b id="fnb-title"></b>
+      <span id="fnb-detail"></span>
+    </span>
+    <span class="fnb-cta">Visit the Events page &rarr;</span>
+  </a>
+</div>
+<style>
+  #fsca-natl-banner{margin:0 0 14px}
+  #fsca-natl-banner .fnb-inner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:#33413a;color:#fff;text-decoration:none;padding:11px 16px;border-radius:10px;
+    font:500 15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #fsca-natl-banner .fnb-icon{font-size:1.1rem;line-height:1}
+  #fsca-natl-banner .fnb-text{display:flex;flex-wrap:wrap;gap:1px 10px;align-items:baseline;flex:1;min-width:200px}
+  #fsca-natl-banner .fnb-text b{font-weight:700}
+  #fsca-natl-banner #fnb-detail{opacity:.85;font-size:.92rem}
+  #fsca-natl-banner .fnb-cta{background:#fff;color:#33413a;font-weight:700;padding:6px 12px;
+    border-radius:7px;font-size:.9rem;white-space:nowrap}
+  #fsca-natl-banner .fnb-inner:hover .fnb-cta{filter:brightness(.94)}
+</style>
+<script>
+(function(){
+  /* ── CONFIG — update once a year ──────────────────────────────────────── */
+  var START      = "2026-09-04";                    /* National start (ISO)   */
+  var END        = "2026-09-07";                    /* National end (ISO)     */
+  var LEAD_DAYS  = 60;                              /* show this many days out */
+  var TITLE      = "2026 FSCA National Specialty";
+  var DETAIL     = "September 4–7 · Greeley, CO";
+  var EVENTS_URL = "/events";
+  /* ─────────────────────────────────────────────────────────────────────── */
+  function d(s){var p=String(s).split("-");return new Date(+p[0],+p[1]-1,+p[2]);}
+  var today=new Date(); today.setHours(0,0,0,0);
+  var from=d(START); from.setDate(from.getDate()-LEAD_DAYS);
+  if(today>=from && today<=d(END)){
+    var el=document.getElementById("fsca-natl-banner");
+    if(!el) return;
+    document.getElementById("fnb-title").textContent=TITLE;
+    document.getElementById("fnb-detail").textContent=DETAIL;
+    el.querySelector(".fnb-inner").setAttribute("href",EVENTS_URL);
+    el.style.display="block";
+  }
+})();
+</script>
