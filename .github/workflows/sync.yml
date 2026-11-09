@@ -58,6 +58,7 @@ jobs:
           mkdir -p site site/ringcards site/rings
           cp events-map.html site/index.html
           cp national-card.html site/national.html
+          cp show-banner.html site/banner.html
           # Finnish Spitz ring cards (generated for Onofrio judging programs);
           # the copy is best-effort — there may be none in a given window.
           cp ringcards/*.html site/ringcards/ 2>/dev/null || echo "no ring cards this run"

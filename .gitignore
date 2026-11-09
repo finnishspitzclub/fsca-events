@@ -10,6 +10,7 @@ fsca-calendar-sync-*.json
 events.db
 events-map.html
 national-card.html
+show-banner.html
 akc-events.ics
 site/
 sync.log

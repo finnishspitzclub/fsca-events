@@ -53,6 +53,11 @@ DB_PATH = Path(__file__).with_name("events.db")
 ICS_PATH = Path(__file__).with_name("akc-events.ics")
 MAP_PATH = Path(__file__).with_name("events-map.html")
 NATIONAL_PATH = Path(__file__).with_name("national-card.html")
+BANNER_PATH = Path(__file__).with_name("show-banner.html")
+BANNER_CANDIDATES = 60                # sites baked in; the page shows the best few
+# Fewer placed breeds than this on a day means the program didn't really parse,
+# so a breed's absence from it can't be taken to mean nobody entered.
+MIN_BREEDS_TO_TRUST_PROGRAM = 10
 RINGCARD_DIR = Path(__file__).with_name("ringcard")            # vendored generator
 RINGCARDS_OUT = Path(__file__).with_name("ringcards")          # generated cards
 RINGCARD_MANIFEST = Path(__file__).with_name("ringcards-manifest.json")
@@ -1441,7 +1446,7 @@ def national_in_window(cluster, today=None):
     return (start - timedelta(days=NATIONAL_LEAD_DAYS)) <= today <= end
 
 
-def render_map_html(events, title, subtitle, national_no=""):
+def render_map_html(events, title, subtitle, national_no="", prog_read=()):
     """Self-contained page: a Leaflet map + a filterable table, both driven by one
     baked-in dataset the browser filters by a rolling date window (from the
     viewer's today) plus state / timezone / specialty / search. Depends on nothing
@@ -1543,6 +1548,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .chev{color:#9aa5b1;font-weight:700}
   .nsub{font-size:.72rem;color:#667;font-weight:400}
   .fsnone{color:#c2c8d0}
+  .tyhit{color:#1d6b1d;font-weight:800}
   .shcell{max-width:340px}
   .supt{white-space:nowrap;font-size:.86rem;color:#4a5568;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   mark{background:#fff2a8;color:inherit;border-radius:2px;padding:0 1px}
@@ -1667,7 +1673,7 @@ def render_map_html(events, title, subtitle, national_no=""):
     <table>
       <thead><tr>
         <th>Dates</th><th>Show(s)</th><th>Location</th><th id="supthdr" title="Superintendent — search a judge's name to swap this to the matched judge">Superintendent</th><th>Zone</th>
-        <th id="lasthdr" title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
+        <th id="thishdr" title="Finnish Spitz entered this year (best day), from the judging program. A dash means the program isn't out yet.">FS this yr</th><th id="lasthdr" title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -1683,6 +1689,7 @@ const NATL = "__NATL__";
 const BREED_API = "__BREED_API__";
 const TZ_INFO = __TZINFO__;
 const GROUP_OF = __GROUPS__;   // first digit of an AKC breed code -> its group
+const PROG_READ = new Set(__PROG_READ__);   // shows whose judging program was fully read
 const FS_CODE='313',FS_NAME='Finnish Spitz',MAX_BREEDS=5;
 // Finnish Spitz is baked in above, so the default view asks nothing of AKC. Any
 // other breed comes from the Worker a month at a time, and the shows are merged
@@ -1816,6 +1823,7 @@ function render(refit){
       '<td style="white-space:nowrap">'+hl(loc,term)+'</td>'+
       '<td class="supt">'+swap+'</td>'+
       '<td style="white-space:nowrap"><span class="dot" style="background:'+esc(c.color)+'"></span>'+esc(c.tzLabel)+'</td>'+
+      thisYearCell(thisYear(c))+
       '<td style="text-align:center;white-space:nowrap"'+(c.fs_last_tip?' title="'+esc(c.fs_last_tip)+'"':'')+'>'+(c.fs_last!=null?'<b>'+c.fs_last+'</b>':'<span class="fsnone">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+esc(c.close)+'</td>'+
       '<td class="docs" style="white-space:nowrap">'+docCell(c.docs,['PRMLST','ENTFRM','EVNINF'])+'</td>'+
@@ -1962,6 +1970,26 @@ function lastYear(members){
   if(!v.length)return {n:null,tip:''};
   if(selBreeds.length===1)return {n:v[0].n,tip:v[0].tip||''};
   return {n:v.reduce((t,x)=>t+x.n,0),tip:v.map(x=>x.name+': '+x.n).join(' · ')+' (best day for each)'};
+}
+// This year's entries from the judging programs: best day per breed at a site, or
+// null while no program is known. Zero means a program was read and nobody entered.
+function thisYear(c){
+  const best={};
+  c.shows.forEach(s=>{
+    const read=PROG_READ.has(String(s.event_no));
+    (s.breeds||[]).forEach(b=>{
+      if(!read&&!b.rc)return;
+      const n=(b.rc&&b.rc.count)||0;
+      if(!best[b.code]||n>best[b.code].n)best[b.code]={n,name:b.name};
+    });
+  });
+  const v=Object.values(best);
+  if(!v.length)return null;
+  return {n:v.reduce((t,x)=>t+x.n,0),tip:v.map(x=>x.name+': '+x.n).join(' · ')+' (best day'+(v.length>1?' for each':'')+')'};
+}
+function thisYearCell(y){
+  const inner=!y?'<span class="fsnone">—</span>':y.n?'<span class="tyhit">'+y.n+'</span>':'<span class="fsnone">0</span>';
+  return '<td style="text-align:center;white-space:nowrap"'+(y?' title="'+esc(y.tip)+'"':'')+'>'+inner+'</td>';
 }
 function makeCluster(members,start,end){
   const m0=members[0],z=TZ_INFO[String(m0.state||'').trim().toUpperCase()]||TZ_INFO[''];
@@ -2122,6 +2150,9 @@ function syncBreedHeader(){
   breedBtn.textContent=breedSummary()+' ▾';
   last.textContent=onlyFS()?'FS last yr':'Last yr';
   last.title=(selBreeds.length===1?selBreeds[0].name:'Selected breeds')+' entered at this site last year (best-attended day)';
+  const thisH=document.getElementById('thishdr');
+  thisH.textContent=onlyFS()?'FS this yr':'This yr';
+  thisH.title=(selBreeds.length===1?selBreeds[0].name:'Selected breeds')+' entered this year (best day), from the judging program. A dash means the program isn\'t out yet.';
   if(natl&&natlReady)natl.hidden=!hasBreed(FS_CODE);
 }
 function setBreeds(next){
@@ -2350,6 +2381,7 @@ requestBreedData(true);
                .replace("__BREED_API__", _h(BREED_API))
                .replace("__TZINFO__", json.dumps(tzinfo, separators=(",", ":")))
                .replace("__GROUPS__", json.dumps(GROUP_BY_CODE_PREFIX, separators=(",", ":")))
+               .replace("__PROG_READ__", json.dumps(sorted(prog_read), separators=(",", ":")))
                .replace("__DATA__", data))
 
 
@@ -2475,6 +2507,7 @@ def cmd_ringcards(args):
     manifest, made, failed = {}, 0, 0
     breed_index = _fetch_breed_index()
     rings = {}     # breed code -> {event_no: ring info}, for every breed but FS
+    read = set()   # event_nos whose program we fully read, so absent means not entered
     for kb, event_nos in sorted(programs.items()):
         with tempfile.TemporaryDirectory() as td:
             pdf, ij = Path(td) / f"{kb}.pdf", Path(td) / f"{kb}.json"
@@ -2539,6 +2572,8 @@ def cmd_ringcards(args):
                 elif len(shows) == len(enos) and all(e in order for e in enos):
                     pick.update(zip(sorted(enos, key=order.index), shows))
             for e, day in pick.items():
+                if p.returncode == 0 and len(day) >= MIN_BREEDS_TO_TRUST_PROGRAM:
+                    read.add(e)
                 for code, info in day.items():
                     if code != FS_BREED_CODE:   # FS is baked into the page itself
                         rings.setdefault(code, {})[e] = info
@@ -2559,6 +2594,8 @@ def cmd_ringcards(args):
             for e in event_nos:
                 manifest[e] = {"card": f"ringcards/{kb}.html",
                                "fs": (pick.get(e) or {}).get(FS_BREED_CODE)}
+    for e in read:
+        manifest.setdefault(e, {"card": None, "fs": None})["read"] = True
     RINGCARD_MANIFEST.write_text(json.dumps(manifest), encoding="utf-8")
     # One small file per breed; the page fetches only the breeds someone picks.
     RINGS_OUT.mkdir(parents=True, exist_ok=True)
@@ -2568,6 +2605,104 @@ def cmd_ringcards(args):
         (RINGS_OUT / f"{code}.json").write_text(json.dumps(shows, separators=(",", ":")), encoding="utf-8")
     print(f"ringcards: {made} card(s), {failed} skipped, {len(manifest)} shows mapped "
           f"(of {len(programs)} programs); ring data for {len(rings)} other breeds")
+
+
+def _short_span(sd, ed):
+    """Compact date range for a banner tile, e.g. 'Nov 12–15'."""
+    def one(d):
+        return d.strftime("%b ") + str(d.day)
+    if sd == ed:
+        return one(sd)
+    if (sd.year, sd.month) == (ed.year, ed.month):
+        return f"{one(sd)}–{ed.day}"
+    return f"{one(sd)} – {one(ed)}"
+
+
+def banner_shows(clusters, natl_no="", prog_read=(), today=None):
+    """The upcoming sites the home-page banner can pick from, soonest first. `days`
+    holds shows whose judging program gave a Finnish Spitz count (0 = read, none
+    entered), `wait` the shows still unknown; the page applies the viewer's today."""
+    today = today or date.today()
+    def known(s):
+        return bool(s.get("rc")) or str(s["event_no"]) in prog_read
+    out = []
+    for c in clusters:
+        sd, ed = _parse_date(c["start"]), _parse_date(c["end"])
+        if ed < today - timedelta(days=1):
+            continue
+        out.append({
+            "no": c["event_no"], "start": c["start"], "end": c["end"],
+            "dates": _short_span(sd, ed), "where": c["where"], "last": c["fs_last"],
+            "natl": bool(natl_no) and any(str(s["event_no"]) == str(natl_no) for s in c["shows"]),
+            "days": [{"end": s["end"], "n": (s.get("rc") or {}).get("count") or 0}
+                     for s in c["shows"] if known(s)],
+            "wait": [s["end"] for s in c["shows"] if not known(s)],
+        })
+    return out[:BANNER_CANDIDATES]
+
+
+def render_banner_html(clusters, natl_no="", prog_read=()):
+    """Small self-contained page for the home page's iframe. One fixed height at
+    every width (the tiles scroll sideways), because an iframe can't resize itself."""
+    data = json.dumps(banner_shows(clusters, natl_no, prog_read), separators=(",", ":")).replace("</", "<\\/")
+    tpl = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upcoming Finnish Spitz shows</title>
+<base target="_top">
+<style>
+  html,body{margin:0;height:100%}
+  body{box-sizing:border-box;background:linear-gradient(135deg,#33473a,#243428);color:#eaf1ea;font:15px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:10px 14px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  h1{margin:0;font-size:1rem;font-weight:800;color:#fff;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .cta{flex:none;background:#fff;color:#2c3f30;font-weight:700;font-size:.86rem;padding:5px 12px;border-radius:7px;text-decoration:none;white-space:nowrap}
+  .cta:hover{filter:brightness(.94)}
+  .row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#ffffff55 transparent;flex:1;min-height:0;padding-bottom:3px}
+  .tile{flex:1 0 190px;max-width:290px;box-sizing:border-box;background:#ffffff1c;border-radius:9px;padding:6px 11px;color:inherit;text-decoration:none;display:flex;flex-direction:column;justify-content:center}
+  .tile:hover{background:#ffffff30}
+  .where{font-weight:700;color:#fff;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .when{font-size:.78rem;color:#d6e3d6;white-space:nowrap}
+  .now{background:#f6c453;color:#3a2a05;font-weight:800;font-size:.66rem;border-radius:4px;padding:0 5px;margin-left:5px}
+  .count{font-size:.8rem;color:#fff;white-space:nowrap}
+  .count b{font-size:1rem;color:#f6d58a}
+  .count.wait{color:#d6e3d6}
+  .none{align-self:center;font-size:.86rem;color:#d6e3d6}
+  @media(max-width:420px){.top{gap:6px}h1{font-size:.78rem}.cta{font-size:.72rem;padding:4px 7px}}
+</style>
+</head>
+<body>
+  <div class="top"><h1>See Finnish Spitz in person</h1><a class="cta" href="https://finnishspitz.org/events">Find shows near you →</a></div>
+  <div class="row" id="row"></div>
+<script>
+const SHOWS = __DATA__;
+const MAX_TILES = 6;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+const n=new Date(),today=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+const live=SHOWS.filter(c=>c.end>=today).map(c=>Object.assign({},c,{
+  entered:c.days.filter(d=>d.end>=today&&d.n>0),
+  unknown:c.wait.some(e=>e>=today)}));
+// Finnish Spitz actually entered comes first. Where nobody knows yet, a site earns
+// a tile only by having drawn them last year; a program showing none rules it out.
+const entered=live.filter(c=>c.entered.length),lastYear=live.filter(c=>!c.entered.length&&c.unknown&&c.last);
+const picks=live.filter(c=>c.natl).concat(entered,lastYear).filter((c,i,a)=>a.indexOf(c)===i).slice(0,MAX_TILES);
+function countLine(c){
+  if(c.entered.length){
+    const ns=c.entered.map(d=>d.n),lo=Math.min(...ns),hi=Math.max(...ns),num=lo===hi?hi:lo+'–'+hi;
+    return '<div class="count"><b>'+num+'</b> Finnish Spitz entered'+(c.entered.length>1?' a day':'')+'</div>';
+  }
+  return c.last?'<div class="count wait"><b>'+c.last+'</b> Finnish Spitz last year</div>':'';
+}
+document.getElementById('row').innerHTML=picks.map(c=>'<a class="tile" target="_blank" rel="noopener" href="index.html#show='+encodeURIComponent(c.no)+'">'+
+  '<div class="where">'+(c.natl?'★ ':'')+esc(c.where)+'</div>'+
+  '<div class="when">'+(c.natl?'National Specialty · ':'')+esc(c.dates)+(c.start<=today?'<span class="now">NOW</span>':'')+'</div>'+
+  countLine(c)+'</a>').join('')||'<div class="none">No Finnish Spitz confirmed at upcoming shows yet.</div>';
+</script>
+</body>
+</html>
+"""
+    return tpl.replace("__DATA__", data)
 
 
 def cmd_map(args):
@@ -2581,11 +2716,13 @@ def cmd_map(args):
     clusters = cluster_events(rows)
     # Attach ring-card links (generated separately by cmd_ringcards). A cluster
     # gets a card if any of its shows' event_no is in the manifest.
+    prog_read = set()
     if RINGCARD_MANIFEST.exists():
         try:
             rcmap = json.loads(RINGCARD_MANIFEST.read_text(encoding="utf-8"))
         except Exception:
             rcmap = {}
+        prog_read = {e for e, v in rcmap.items() if isinstance(v, dict) and v.get("read")}
         for c in clusters:
             for s in c["shows"]:
                 e = rcmap.get(str(s["event_no"]))
@@ -2611,8 +2748,9 @@ def cmd_map(args):
     subtitle = (f"{shows} shows at {len(clusters)} sites · filter & click any show below · "
                 f"{tail}updated {updated}")
     out = Path(args.out) if getattr(args, "out", None) else MAP_PATH
-    out.write_text(render_map_html(clusters, title, subtitle, natl_no), encoding="utf-8")
+    out.write_text(render_map_html(clusters, title, subtitle, natl_no, prog_read), encoding="utf-8")
     print(f"wrote {out}  ({len(clusters)} clusters / {shows} shows)")
+    BANNER_PATH.write_text(render_banner_html(clusters, natl_no, prog_read), encoding="utf-8")
 
 
 # ---------------------------------------------------------------- national card
