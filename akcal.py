@@ -1560,6 +1560,7 @@ def render_map_html(events, title, subtitle, national_no="", prog_read=()):
   .docs .doc:hover{filter:brightness(1.15)}
   .doclink{display:inline-block;color:#0b5cad;background:#eef3f8;border-radius:5px;padding:1px 7px;margin:0 4px 3px 0;text-decoration:none;white-space:nowrap;font-size:.78rem}
   .doclink:hover{background:#dde8f2}
+  .arrived .views,.arrived .filters{display:none}
   #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:826px}
   .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
@@ -1690,7 +1691,7 @@ const BREED_API = "__BREED_API__";
 const TZ_INFO = __TZINFO__;
 const GROUP_OF = __GROUPS__;   // first digit of an AKC breed code -> its group
 const PROG_READ = new Set(__PROG_READ__);   // shows whose judging program was fully read
-const FS_CODE='313',FS_NAME='Finnish Spitz',MAX_BREEDS=5;
+const FS_CODE='313',FS_NAME='Finnish Spitz',MAX_BREEDS=5,BANNER_NOTE_MAX_AGE_MS=120000;
 // Finnish Spitz is baked in above, so the default view asks nothing of AKC. Any
 // other breed comes from the Worker a month at a time, and the shows are merged
 // and re-clustered here, each show carrying one entry per selected breed in .breeds.
@@ -2325,7 +2326,7 @@ function renderDetail(c){
   detailEl.innerHTML=html;
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
-function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
+function closeDetail(){if(document.body.classList.contains('arrived')){document.body.classList.remove('arrived');map.invalidateSize();}detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{
   const b=e.target.closest('[data-ics]');
   if(b&&CUR){dlIcs(CUR.shows[+b.dataset.ics],CUR);return;}
@@ -2345,10 +2346,8 @@ rebuildData();buildStatePanel();
 renderAll(true);
 window.addEventListener('resize',()=>{try{map.invalidateSize();}catch(_){}});
 setTimeout(()=>{try{map.invalidateSize();}catch(_){}},250);
-function openFromHash(){
-  const m=/#show=([\w-]+)/.exec(location.hash);
-  if(!m)return;
-  const has=c=>c.shows.some(s=>String(s.event_no)===m[1]);
+function openShow(no){
+  const has=c=>c.shows.some(s=>String(s.event_no)===no);
   let c=ALL.find(has);
   // A shared link names a Finnish Spitz show; a saved picker may have dropped FS.
   if(!c&&FS_ALL.some(has)){
@@ -2356,9 +2355,23 @@ function openFromHash(){
     c=ALL.find(has);
   }
   if(c)openDetail(c);
+  return !!c;
+}
+function openFromHash(){
+  const m=/#show=([\w-]+)/.exec(location.hash);
+  if(m)openShow(m[1]);
+}
+// A home-page banner tile left a note saying which show was clicked. Put that show
+// at the top, since the panel otherwise sits below the fold; Back restores the page.
+function openFromBanner(){
+  let note=null;
+  try{const raw=localStorage.getItem('fsca_open_show');localStorage.removeItem('fsca_open_show');note=JSON.parse(raw||'null');}catch(_){}
+  if(!note||!note.no||!(Date.now()-note.at<BANNER_NOTE_MAX_AGE_MS))return;
+  if(openShow(String(note.no)))document.body.classList.add('arrived');
 }
 window.addEventListener('hashchange',openFromHash);
 openFromHash();
+openFromBanner();
 (function(){
   const btn=document.getElementById('natlBtn');
   if(!btn||!NATL)return;
@@ -2678,6 +2691,7 @@ def render_banner_html(clusters, natl_no="", prog_read=()):
 <script>
 const SHOWS = __DATA__;
 const MAX_TILES = 6;
+const EVENTS_URL = 'https://finnishspitz.org/events';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 const n=new Date(),today=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
 const live=SHOWS.filter(c=>c.end>=today).map(c=>Object.assign({},c,{
@@ -2694,10 +2708,17 @@ function countLine(c){
   }
   return c.last?'<div class="count wait"><b>'+c.last+'</b> Finnish Spitz last year</div>':'';
 }
-document.getElementById('row').innerHTML=picks.map(c=>'<a class="tile" target="_blank" rel="noopener" href="index.html#show='+encodeURIComponent(c.no)+'">'+
+document.getElementById('row').innerHTML=picks.map(c=>'<a class="tile" href="'+EVENTS_URL+'" data-no="'+esc(c.no)+'">'+
   '<div class="where">'+(c.natl?'★ ':'')+esc(c.where)+'</div>'+
   '<div class="when">'+(c.natl?'National Specialty · ':'')+esc(c.dates)+(c.start<=today?'<span class="now">NOW</span>':'')+'</div>'+
   countLine(c)+'</a>').join('')||'<div class="none">No Finnish Spitz confirmed at upcoming shows yet.</div>';
+// /events embeds the dashboard at a fixed URL, so a link can't say which show to
+// open. This page and the dashboard share a browser origin, so leave it a note.
+document.getElementById('row').addEventListener('click',e=>{
+  const tile=e.target.closest('.tile');
+  if(!tile)return;
+  try{localStorage.setItem('fsca_open_show',JSON.stringify({no:tile.dataset.no,at:Date.now()}));}catch(_){}
+});
 </script>
 </body>
 </html>
