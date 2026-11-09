@@ -34,6 +34,9 @@ def main(argv=None):
     ap.add_argument("-o", "--out", default="intermediate.json")
     ap.add_argument("--super", dest="sup", default=None,
                     help="force a superintendent extractor (e.g. onofrio)")
+    ap.add_argument("--dates", default="",
+                    help="comma-separated ISO show dates from the AKC feed, for "
+                         "programs that print only a weekday")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
 
@@ -52,7 +55,7 @@ def main(argv=None):
                   f"(have {[e.name for e in extractors.all_extractors()]}).", file=sys.stderr)
             return 2
 
-    inter = ext.parse(args.pdf)
+    inter = ext.parse(args.pdf, [d for d in args.dates.split(",") if d] or None)
     errors = validate_intermediate(inter)
     if errors:
         print("parse: extracted JSON FAILED validation:", file=sys.stderr)

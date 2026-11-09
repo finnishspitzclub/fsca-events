@@ -27,6 +27,7 @@
         "properties": {
           "date": {"type": "string", "description": "ISO date, e.g. 2026-07-10"},
           "label": {"type": "string", "description": "Weekday, e.g. Friday"},
+          "show": {"type": "integer", "description": "Show number when one date holds two shows (AM/PM, Show #1/#2). Omitted otherwise."},
           "entries": {
             "type": "array",
             "description": "Every breed judged that day, in program order within each ring/time-block. The renderer filters to the breeds named in weekend.json.",

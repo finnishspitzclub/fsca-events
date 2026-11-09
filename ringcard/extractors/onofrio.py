@@ -215,7 +215,8 @@ def index_lookup(index_rows, breed, day_i):
 
 
 # ---- main parse ----------------------------------------------------------
-def parse(pdf_path: str) -> dict:
+def parse(pdf_path: str, dates=None) -> dict:
+    # `dates` is for formats that print only a weekday; Onofrio prints full dates.
     with pdfplumber.open(pdf_path) as pdf:   # close the handle (Windows locks the file otherwise)
         show = extract_show(pdf)
         index_rows = extract_index(pdf)

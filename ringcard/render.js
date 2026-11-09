@@ -211,7 +211,8 @@ function main() {
     '/*__DATA__*/ ' + JSON.stringify(DATA) + ' /*__END_DATA__*/'
   );
   if (injected === template) die('template has no /*__DATA__*/ … /*__END_DATA__*/ marker');
-  fs.writeFileSync(opt.out, injected);
+  const titled = injected.replace('__TITLE__', `${inter.show.club} · Finnish Spitz Ring Card`.replace(/[<&]/g, ''));
+  fs.writeFileSync(opt.out, titled);
   console.error(`render: wrote ${opt.out}  (${R.length} rows across ${DAYS.length} days, rings ${rings.join(',')})`);
 }
 

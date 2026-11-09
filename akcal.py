@@ -55,6 +55,10 @@ NATIONAL_PATH = Path(__file__).with_name("national-card.html")
 RINGCARD_DIR = Path(__file__).with_name("ringcard")            # vendored generator
 RINGCARDS_OUT = Path(__file__).with_name("ringcards")          # generated cards
 RINGCARD_MANIFEST = Path(__file__).with_name("ringcards-manifest.json")
+# AKC-feed superintendent name (lowercase substring) -> ringcard/extractors name.
+RINGCARD_SUPERS = {"onofrio": "onofrio", "mb-f": "mbf", "foy trent": "foytrent",
+                   "baray": "baray", "jim rau": "jimrau", "bradshaw": "bradshaw",
+                   "executive dog": "executive", "lorraine yu": "lorraineyu"}
 
 # The FSCA National Specialty has no distinct row in the AKC feed - it's held in
 # conjunction with a cluster. Point this at the anchor event (e.g. the breed/group
@@ -1899,6 +1903,7 @@ function showCard(s,i){
     if(seq||gl||ghdr)grouppanel='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>'+gnote+'</div>';
   }
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
+    (s.rcard&&!CUR.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(s.rcard)+'">🎯 Ring card for this day →</a>':'')+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
     '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>'+ringpanel+grouppanel+'</div>';
 }
@@ -1961,25 +1966,29 @@ openFromHash();
 
 
 def cmd_ringcards(args):
-    """Generate Finnish Spitz ring cards for shows with an ONOFRIO judging
-    program. One card per unique program (keyBinary), shared across the shows
-    that reference it; writes ringcards/<kb>.html and a manifest mapping each
-    show's event_no -> its card. Uses the vendored ringcard/ pipeline
-    (parse.py + render.js). Non-Onofrio supers and parse failures are skipped,
-    so the card only appears where we can actually produce a good one."""
+    """Generate Finnish Spitz ring cards for shows with a judging program from
+    a superintendent we have an extractor for (RINGCARD_SUPERS). One card per
+    unique program (keyBinary), shared across the shows that reference it;
+    writes ringcards/<kb>.html and a manifest mapping each show's event_no -> its
+    card. Uses the vendored ringcard/ pipeline (parse.py + render.js). Other
+    supers and parse failures are skipped, so the card only appears where we
+    can actually produce a good one."""
     import subprocess, tempfile
     conn = db()
     rows = conn.execute(
         "SELECT event_no, start_date, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
     conn.close()
 
-    programs = {}   # keyBinary -> {event_no: start_date} — Onofrio judging programs only
+    programs, extractor = {}, {}   # keyBinary -> {event_no: start_date} / extractor name
     for r in rows:
-        if "onofrio" not in (r["superint"] or "").lower():
+        sup = (r["superint"] or "").lower()
+        ext = next((v for k, v in RINGCARD_SUPERS.items() if k in sup), None)
+        if not ext:
             continue
         for d in json.loads(r["documents"] or "[]"):
             if d.get("code") == "JDGPRO" and d.get("keyBinary"):
                 programs.setdefault(d["keyBinary"], {})[str(r["event_no"])] = r["start_date"]
+                extractor[d["keyBinary"]] = ext
 
     out_dir = Path(args.out) if getattr(args, "out", None) else RINGCARDS_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1993,7 +2002,9 @@ def cmd_ringcards(args):
                             DOC_URL.format(kb)], capture_output=True)
             if not pdf.exists() or pdf.stat().st_size < 1000 or pdf.read_bytes()[:5] != b"%PDF-":
                 print(f"ringcard: kb{kb} download failed — skipped"); failed += 1; continue
-            p = subprocess.run([sys.executable, "parse.py", str(pdf), "-o", str(ij)],
+            p = subprocess.run([sys.executable, "parse.py", str(pdf), "-o", str(ij),
+                                "--super", extractor[kb],
+                                "--dates", ",".join(sorted(set(event_nos.values())))],
                                cwd=str(RINGCARD_DIR), capture_output=True, text=True)
             if not ij.exists():         # extractor crashed / superintendent not detected
                 print(f"ringcard: kb{kb} not parseable — skipped"); failed += 1; continue
@@ -2033,7 +2044,7 @@ def cmd_ringcards(args):
             # panel inline. Deliberately NOT the judge — the AKC feed already gives
             # us breed/group/BIS judges (more reliable); the judging program's
             # unique value is ring, time, running order and this-year's count.
-            fs_by_date = {}
+            fs_by_date = {}   # date -> [per-show FS info, in show order]
             for d in inter.get("days", []):
                 grps = d.get("groups") or {}
                 reg = grps.get("regular") or {}
@@ -2060,9 +2071,10 @@ def cmd_ringcards(args):
                     if "non-sporting" in (g.get("group") or "").lower():
                         nohs = g.get("judge") or ""
                         break
+                fs = None
                 for e in d.get("entries", []):
                     if "finnish spitz" in (e.get("breed") or "").lower() and isinstance(e.get("ring"), int):
-                        fs_by_date[d.get("date")] = {
+                        fs = {
                             "ring": e.get("ring"), "time": e.get("slotTime"),
                             "ahead": e.get("ahead") or 0, "count": e.get("entryCount"),
                             "split": e.get("split") or "",
@@ -2072,12 +2084,27 @@ def cmd_ringcards(args):
                             "ntime": nohsblk.get("start"), "nmin": nohsblk.get("startMin"),
                             "nring": nohsblk.get("ring"), "nfollows": bool(nohsblk.get("follows")),
                             "gseq": gseq}
+                fs_by_date.setdefault(d.get("date"), []).append(fs)
             made += 1
-            for eno, edate in event_nos.items():
-                manifest[eno] = {"card": f"ringcards/{kb}.html", "fs": fs_by_date.get(edate)}
+            # Two shows on one date (Show #1/#2, AM/PM) share a program, and event
+            # numbers don't follow running order -- the cover's listing does. If
+            # the cover doesn't settle which event is which, give that day no
+            # panel rather than the other show's ring.
+            order = inter.get("show", {}).get("eventOrder") or []
+            for edate in set(event_nos.values()):
+                enos = [e for e, d in event_nos.items() if d == edate]
+                shows = fs_by_date.get(edate) or []
+                if len(shows) == 1:
+                    pick = {e: shows[0] for e in enos}
+                elif len(shows) == len(enos) and all(e in order for e in enos):
+                    pick = dict(zip(sorted(enos, key=order.index), shows))
+                else:
+                    pick = {}
+                for e in enos:
+                    manifest[e] = {"card": f"ringcards/{kb}.html", "fs": pick.get(e)}
     RINGCARD_MANIFEST.write_text(json.dumps(manifest), encoding="utf-8")
     print(f"ringcards: {made} card(s), {failed} skipped, {len(manifest)} shows mapped "
-          f"(of {len(programs)} Onofrio programs)")
+          f"(of {len(programs)} programs)")
 
 
 def cmd_map(args):
@@ -2103,9 +2130,14 @@ def cmd_map(args):
                     continue
                 card = e.get("card") if isinstance(e, dict) else e   # dict now; str = legacy
                 if card:
-                    c["rcard"] = card
+                    s["rcard"] = card
                 if isinstance(e, dict) and e.get("fs"):
                     s["rc"] = e["fs"]                                 # per-day FS ring info
+            # One program for the whole cluster gets one button up top; supers
+            # that print a program per day (MB-F, Jim Rau) get one on each show.
+            cards = {s["rcard"] for s in c["shows"] if s.get("rcard")}
+            if len(cards) == 1:
+                c["rcard"] = cards.pop()
     shows = sum(c["n"] for c in clusters)
     updated = datetime.now().strftime("%b %d, %Y").replace(" 0", " ")
     title = "Finnish Spitz — AKC Events"
