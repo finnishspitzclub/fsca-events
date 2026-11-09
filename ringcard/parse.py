@@ -56,6 +56,12 @@ def main(argv=None):
             return 2
 
     inter = ext.parse(args.pdf, [d for d in args.dates.split(",") if d] or None)
+    # "Immediately following each Regular Variety Group" is the NOHS timing. Any
+    # clock time an extractor attached to that block came from somewhere else.
+    for d in inter.get("days", []):
+        nohs = (d.get("groups") or {}).get("nohs") or {}
+        if nohs.get("follows"):
+            nohs["start"], nohs["startMin"] = None, None
     errors = validate_intermediate(inter)
     if errors:
         print("parse: extracted JSON FAILED validation:", file=sys.stderr)

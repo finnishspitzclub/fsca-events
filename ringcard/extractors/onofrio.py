@@ -315,6 +315,9 @@ def parse_day_stream(stream):
     # start listing them with no header. So a bare "X GROUP - JUDGE" line defaults
     # to Regular; only NOHS / Bred-by / Puppy sections have to announce themselves.
     group_ctx = None         # None(->regular) | 'nohs' | 'bred'
+    # A group block's clock time sits right under its header. group_ctx outlives
+    # the block, so without this the next ring's time reads as the group's start.
+    group_time_open = False
     prev_ring = None         # ring number if the PREVIOUS line was a bare "RING N"
     where = None             # (page, col) of the previous line
     anchored = False         # have we seen a RING/time in THIS column yet?
@@ -329,6 +332,7 @@ def parse_day_stream(stream):
         if gh:
             u = gh.group(0).upper()
             group_ctx = "nohs" if "NOHS" in u else ("bred" if "BRED" in u else "regular")
+            group_time_open = True
             # the "RING N" printed on the line immediately before a group header is
             # THAT block's ring. Regular and NOHS get their own — often DIFFERENT
             # rings (e.g. Regular Ring 2 / NOHS Ring 4), so never mirror one onto
@@ -349,6 +353,7 @@ def parse_day_stream(stream):
         low = line.lower()
         if group_ctx == "nohs" and "follow" in low and "regular" in low:
             groups["nohs"]["follows"] = True
+            group_time_open = False
             continue
 
         gm = GROUP_RE.match(line)
@@ -373,6 +378,8 @@ def parse_day_stream(stream):
             continue
 
         if CONTROL_RE.search(line):
+            if "ORDER TO BE" in line.upper():
+                group_time_open = False
             continue
 
         tm = TIME_RE.match(line)
@@ -386,13 +393,15 @@ def parse_day_stream(stream):
             # first time-line after a group header is that block's start time
             # (works for both Regular and NOHS — NOHS often runs earlier)
             lane = group_ctx if group_ctx in ("regular", "nohs") else None
-            if lane and not groups[lane]["order"] and groups[lane]["start"] is None:
+            if lane and group_time_open and not groups[lane]["order"] and groups[lane]["start"] is None:
                 groups[lane]["start"] = cur_time
                 groups[lane]["startMin"] = cur_min
+            group_time_open = False
             continue
 
         bm = BREED_RE.match(line)
         if bm:
+            group_time_open = False
             count = int(bm.group(1))
             breed = bm.group(2).strip()
             split = bm.group(3)
