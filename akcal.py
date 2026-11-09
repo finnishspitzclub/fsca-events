@@ -1976,10 +1976,10 @@ def cmd_ringcards(args):
     import subprocess, tempfile
     conn = db()
     rows = conn.execute(
-        "SELECT event_no, start_date, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
+        "SELECT event_no, club, start_date, superint, documents FROM events WHERE documents IS NOT NULL").fetchall()
     conn.close()
 
-    programs, extractor = {}, {}   # keyBinary -> {event_no: start_date} / extractor name
+    programs, extractor, clubs = {}, {}, {}   # keyBinary -> {event_no: start_date} / extractor name / clubs
     for r in rows:
         sup = (r["superint"] or "").lower()
         ext = next((v for k, v in RINGCARD_SUPERS.items() if k in sup), None)
@@ -1989,6 +1989,7 @@ def cmd_ringcards(args):
             if d.get("code") == "JDGPRO" and d.get("keyBinary"):
                 programs.setdefault(d["keyBinary"], {})[str(r["event_no"])] = r["start_date"]
                 extractor[d["keyBinary"]] = ext
+                clubs.setdefault(d["keyBinary"], set()).add(r["club"])
 
     out_dir = Path(args.out) if getattr(args, "out", None) else RINGCARDS_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -2025,7 +2026,12 @@ def cmd_ringcards(args):
                                     and e.get("slotMin") is not None
                                     and e.get("ahead") is not None
                                     and e.get("entryCount") is not None]
-                ij.write_text(json.dumps(inter), encoding="utf-8")
+            # AKC's club name, not the cover's: most covers lead with 'Licensed by
+            # the American Kennel Club' and many never print the club on a line alone.
+            names = " / ".join(sorted(filter(None, clubs[kb])))
+            if names:
+                inter.setdefault("show", {})["club"] = names
+            ij.write_text(json.dumps(inter), encoding="utf-8")
             # Only make a card when Finnish Spitz is actually entered and placeable
             # — no point generating an empty "no FS scheduled" card.
             has_fs = any("finnish spitz" in (e.get("breed") or "").lower()
