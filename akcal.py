@@ -1560,7 +1560,6 @@ def render_map_html(events, title, subtitle, national_no="", prog_read=()):
   .docs .doc:hover{filter:brightness(1.15)}
   .doclink{display:inline-block;color:#0b5cad;background:#eef3f8;border-radius:5px;padding:1px 7px;margin:0 4px 3px 0;text-decoration:none;white-space:nowrap;font-size:.78rem}
   .doclink:hover{background:#dde8f2}
-  .arrived .views,.arrived .filters{display:none}
   #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:826px}
   .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
@@ -2326,7 +2325,7 @@ function renderDetail(c){
   detailEl.innerHTML=html;
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
-function closeDetail(){if(document.body.classList.contains('arrived')){document.body.classList.remove('arrived');map.invalidateSize();}detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
+function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{
   const b=e.target.closest('[data-ics]');
   if(b&&CUR){dlIcs(CUR.shows[+b.dataset.ics],CUR);return;}
@@ -2361,13 +2360,13 @@ function openFromHash(){
   const m=/#show=([\w-]+)/.exec(location.hash);
   if(m)openShow(m[1]);
 }
-// A home-page banner tile left a note saying which show was clicked. Put that show
-// at the top, since the panel otherwise sits below the fold; Back restores the page.
+// A home-page banner tile left a note saying which show was clicked: open it just
+// as if it had been clicked here.
 function openFromBanner(){
   let note=null;
   try{const raw=localStorage.getItem('fsca_open_show');localStorage.removeItem('fsca_open_show');note=JSON.parse(raw||'null');}catch(_){}
   if(!note||!note.no||!(Date.now()-note.at<BANNER_NOTE_MAX_AGE_MS))return;
-  if(openShow(String(note.no)))document.body.classList.add('arrived');
+  openShow(String(note.no));
 }
 window.addEventListener('hashchange',openFromHash);
 openFromHash();
