@@ -1550,12 +1550,10 @@ def render_map_html(events, title, subtitle, national_no=""):
   .jrole{display:inline-block;font-size:.6rem;font-weight:700;color:#5b3a8a;background:#ede4fb;border-radius:3px;padding:0 4px;margin-left:3px;vertical-align:middle}
   .enterchip{display:inline-block;font-size:.66rem;font-weight:700;color:#1d6b1d !important;background:#dcf2dc;border-radius:8px;padding:1px 6px;margin-left:4px;text-decoration:none;white-space:nowrap}
   .enterchip:hover{background:#c8ecc8;text-decoration:none !important}
-  .enterlink{display:inline-block;font-weight:700;color:#1d6b1d !important;background:#dcf2dc;border-radius:6px;padding:2px 9px;text-decoration:none !important}
-  .enterlink:hover{background:#c8ecc8}
   .docs .doc{text-decoration:none;font-size:1.02rem;margin-right:3px;line-height:1}
   .docs .doc:hover{filter:brightness(1.15)}
-  .doclink{color:#0b5cad;text-decoration:none;white-space:nowrap}
-  .doclink:hover{text-decoration:underline}
+  .doclink{display:inline-block;color:#0b5cad;background:#eef3f8;border-radius:5px;padding:1px 7px;margin:0 4px 3px 0;text-decoration:none;white-space:nowrap;font-size:.78rem}
+  .doclink:hover{background:#dde8f2}
   #detail{display:none;margin:8px 14px 2px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto;max-height:826px}
   .calbar{transition:filter .12s ease,box-shadow .12s ease,opacity .12s ease}
   .calbar.sel{filter:brightness(1.08)}
@@ -1571,11 +1569,27 @@ def render_map_html(events, title, subtitle, national_no=""):
   .csum a{color:#0b5cad}
   .rcardbtn{display:inline-block;margin:2px 0 8px;background:linear-gradient(135deg,#7a2e12,#a3431c);color:#fff;font-weight:700;font-size:.85rem;text-decoration:none;padding:8px 13px;border-radius:8px;box-shadow:0 1px 3px #0003}
   .rcardbtn:hover{filter:brightness(1.07)}
-  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px;margin:9px 0;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
-  .showmain{flex:1 1 300px;min-width:0}
+  .showcard{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin:10px 0;display:flex;gap:16px;align-items:stretch;flex-wrap:wrap}
+  .showinfo{flex:0 0 320px;max-width:100%;min-width:0;display:flex;flex-direction:column}
+  .showinfo.solo{flex:1 1 100%}
+  .showinfo h3{margin:0 0 3px;font-size:.98rem;line-height:1.25}
+  .sdate{font-size:.84rem;color:#333}
+  .stype{font-size:.68rem;font-weight:700;color:#0f2b46;background:#e7edf3;border-radius:5px;padding:1px 6px;margin-left:5px;white-space:nowrap}
+  .sfacts{display:grid;grid-template-columns:100px minmax(0,1fr);gap:6px 10px;margin:10px 0 0;font-size:.82rem;line-height:1.35}
+  .sfacts dt{color:#6b7480;font-size:.75rem;padding-top:1px}
+  .sfacts dd{margin:0;color:#1f2933;overflow-wrap:anywhere}
+  .ssub{display:block;color:#6b7480;font-size:.76rem}
+  .sact{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:11px}
+  .sbtn{font:inherit;font-size:.76rem;text-decoration:none;border:1px solid #cbd5e1;color:#0f2b46;background:#fff;padding:5px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}
+  .sbtn:hover{background:#eef3f8}
+  .sbtn.go{background:#dcf2dc;border-color:#b7e0b7;color:#1d6b1d;font-weight:700}
+  .sbtn.go:hover{background:#c8ecc8}
+  .sbtn.rc{background:#fff3e8;border-color:#d9b48f;color:#7a2e12;font-weight:700}
+  .sbtn.rc:hover{background:#ffe8d4}
+  .showlane{flex:1 1 380px;min-width:0;display:flex;gap:10px;overflow-x:auto;align-items:stretch;padding-bottom:6px}
   /* two day-of components, no titles: breed ring (centered) + the full group
      running order with your judges (a compact ordered list) */
-  .showring{flex:0 0 172px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:12px 11px;text-align:center;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:1px}
+  .showring{box-sizing:border-box;flex:0 0 172px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:12px 11px;text-align:center;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:1px}
   .showring .srbig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;justify-content:center}
   .showring .srring{font-size:1.1rem;font-weight:800;color:#7a2e12}
   .showring .srt{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;color:#7a2e12;font-size:.98rem}
@@ -1583,7 +1597,7 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showring .sra{font-size:.79rem;color:#6b5d50;margin-top:5px;line-height:1.4} .showring .sra b{color:#7a2e12}
   .showring .src{font-size:.79rem;color:#6b5d50;margin-top:4px} .showring .src b{color:#7a2e12}
   .showring .src .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;color:#9a8a7a}
-  .showgroups{flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;flex-direction:column;gap:8px}
+  .showgroups{box-sizing:border-box;flex:0 0 358px;background:#fff7ef;border:1px solid #f0d9c4;border-radius:9px;padding:10px 11px;align-self:stretch;display:flex;flex-direction:column;gap:8px}
   .showgroups .gbody{display:flex;gap:11px;align-items:stretch}
   .showgroups .ghdr{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
   .gsess{font-size:.72rem;color:#6b5d50;background:#fff;border:1px solid #f0d9c4;border-radius:6px;padding:3px 8px;white-space:nowrap}
@@ -1591,30 +1605,31 @@ def render_map_html(events, title, subtitle, national_no=""):
   .gsl{display:inline-block;box-sizing:border-box;min-width:46px;text-align:center;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.56rem;font-weight:700;color:#7a2e12;background:#f0d9c4;border-radius:3px;padding:1px 5px;margin-right:6px;vertical-align:middle;letter-spacing:.02em}
   .gnote{font-size:.66rem;color:#a08b78;font-style:italic;margin-top:1px;white-space:normal;line-height:1.3}
   .showgroups .gorder{flex:0 0 158px}
-  .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font-size:.76rem;color:#6b5d50;padding:1.5px 0}
-  .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.09);border-radius:4px;box-shadow:inset 3px 0 0 #7a2e12}
+  .showgroups .grow4{display:grid;grid-template-columns:15px 1fr auto;gap:7px;align-items:center;font:inherit;font-size:.76rem;color:#6b5d50;padding:2.5px 6px 2.5px 3px;width:100%;background:none;border:0;border-radius:4px;text-align:left;cursor:pointer}
+  .showgroups .grow4:hover{background:rgba(15,43,70,.08)}
+  .showgroups .grow4.gmine{color:#7a2e12;font-weight:700;background:rgba(122,46,18,.1);box-shadow:inset 3px 0 0 #7a2e12}
+  .showgroups .grow4.gsel,.showgroups .grow4.gsel:hover{background:#0f2b46;color:#fff;box-shadow:none}
+  .showgroups .grow4.gmine.gsel,.showgroups .grow4.gmine.gsel:hover{background:#7a2e12;color:#fff}
+  .showgroups .grow4.gsel .gn,.showgroups .grow4.gsel .ge{color:#fff}
   .showgroups .gn{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.64rem;color:#b09a86;text-align:right} .showgroups .gmine .gn{color:#7a2e12}
   .showgroups .gg{white-space:nowrap}
   .showgroups .ge{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.7rem;color:#9a8a7a} .showgroups .gmine .ge{color:#7a2e12}
-  .showgroups .gjudges{flex:1;min-width:0;border-left:1px solid #f0d9c4;padding-left:11px;display:flex;flex-direction:column;justify-content:center}
-  .showgroups .grow3{font-size:.82rem;color:#4a3f36;line-height:1.9;white-space:nowrap}
+  .showgroups .gjudges{flex:1;min-width:0;border-left:1px solid #f0d9c4;padding-left:11px;display:flex;flex-direction:column;gap:5px}
+  .showgroups .gjhead{font-size:.76rem;font-weight:800;color:#0f2b46;line-height:1.25}
+  .showgroups .gjhead.own{color:#7a2e12}
+  .showgroups .grow3{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;font-size:.82rem;color:#4a3f36;line-height:1.35}
+  .showgroups .gnone{font-size:.76rem;color:#a08b78;font-style:italic}
+  .showring .srn{font-size:.76rem;color:#a08b78;font-style:italic;margin-top:5px;line-height:1.3}
   @media(max-width:520px){
-    .showring,.showgroups{flex:1 1 100%;min-width:0;box-sizing:border-box}
+    .showlane .showgroups{flex-basis:min(330px,84vw)}
     .showgroups .gbody{flex-direction:column}
     .showgroups .gorder{flex:none}
     .showgroups .gjudges{border-left:0;padding-left:0;border-top:1px solid #f0d9c4;padding-top:7px}
-    .showgroups .grow3{white-space:normal}
   }
   .grl{display:inline-block;box-sizing:border-box;min-width:40px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
   .grl.n{background:#7a2e12;color:#fff} .grl.b{background:#5b4a3d;color:#fff}
   .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
   .jsrc{color:#9aa5b1;font-weight:400;font-size:.9em}
-  .showcard h3{margin:0 0 4px;font-size:.96rem}
-  .showcard .meta{font-size:.83rem;line-height:1.45;color:#333}
-  .showcard .meta b{color:#111}
-  .addcal{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap}
-  .addcal a,.addcal button{font:inherit;font-size:.78rem;text-decoration:none;border:1px solid #0b5cad;color:#0b5cad;background:#fff;padding:5px 10px;border-radius:6px;cursor:pointer}
-  .addcal .ics{border-color:#666;color:#666}
 </style>
 </head>
 <body>
@@ -1667,6 +1682,7 @@ let ALL = FS_ALL;
 const NATL = "__NATL__";
 const BREED_API = "__BREED_API__";
 const TZ_INFO = __TZINFO__;
+const GROUP_OF = __GROUPS__;   // first digit of an AKC breed code -> its group
 const FS_CODE='313',FS_NAME='Finnish Spitz',MAX_BREEDS=5;
 // Finnish Spitz is baked in above, so the default view asks nothing of AKC. Any
 // other breed comes from the Worker a month at a time, and the shows are merged
@@ -1693,7 +1709,7 @@ function docIcon(code){return code==='PRMLST'?'📄':code==='JDGPRO'?'📋':code
 function docIcons(docs){return (docs||[]).map(d=>'<a class="doc" target="_blank" rel="noopener" title="'+esc(d.label)+' — PDF from AKC" href="'+esc(d.url)+'">'+docIcon(d.code)+'</a>').join('');}
 function docIconsByType(docs){var seen={},out=[];(docs||[]).forEach(function(d){if(!seen[d.code]){seen[d.code]=1;out.push(d);}});return docIcons(out);}
 function docCell(docs,codes){return docIconsByType((docs||[]).filter(function(d){return codes.indexOf(d.code)>=0;}));}
-function docLinks(docs){return (docs||[]).map(d=>'<a class="doclink" target="_blank" rel="noopener" href="'+esc(d.url)+'">'+docIcon(d.code)+' '+esc(d.label)+'</a>').join(' · ');}
+function docLinks(docs){return (docs||[]).map(d=>'<a class="doclink" target="_blank" rel="noopener" href="'+esc(d.url)+'">'+docIcon(d.code)+' '+esc(d.label)+'</a>').join('');}
 function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 // Highlight every occurrence of an already-lowercased search term in text.
 function hl(text,term){var s=String(text==null?'':text);if(!term)return esc(s);var i=s.toLowerCase().indexOf(term);if(i<0)return esc(s);return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+term.length))+'</mark>'+hl(s.slice(i+term.length),term);}
@@ -1899,13 +1915,19 @@ function dlIcs(s,c){
   document.body.appendChild(a);a.click();a.remove();
 }
 let CUR=null;
-function judgeBits(b){
-  const j=[];
-  if(b.breed_judge&&b.breed_judge===b.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(b.breed_judge));}
-  else{if(b.breed_judge)j.push('<b>Breed:</b> '+esc(b.breed_judge));if(b.group_judge)j.push('<b>Group:</b> '+esc(b.group_judge));}
-  if(b.nohs_judge)j.push('<b>NOHS Group:</b> '+esc(b.nohs_judge));
-  return j;
+function judgeRows(b){
+  const r=[];
+  if(b.breed_judge&&b.breed_judge===b.group_judge)r.push(['Breed & Group',b.breed_judge]);
+  else{if(b.breed_judge)r.push(['Breed',b.breed_judge]);if(b.group_judge)r.push(['Group',b.group_judge]);}
+  if(b.nohs_judge)r.push(['NOHS',b.nohs_judge]);
+  return r;
 }
+function fact(label,value){return '<dt>'+esc(label)+'</dt><dd>'+value+'</dd>';}
+function fmtDay(iso){const d=pd(iso);return MON[d.getMonth()]+' '+d.getDate();}
+function groupOf(code){return GROUP_OF[String(code).charAt(0)]||'';}
+function groupKey(name){return String(name||'').toLowerCase().replace(' group','').trim();}
+// Which group each show's running order is showing judges for: event_no -> index.
+let groupPick={};
 // ---- clustering: the browser's copy of cluster_events/_make_cluster in akcal.py
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function dayLabel(d){return DOW[d.getDay()]+' '+MON[d.getMonth()]+' '+d.getDate();}
@@ -2104,6 +2126,7 @@ function syncBreedHeader(){
 }
 function setBreeds(next){
   selBreeds=next;
+  groupPick={};
   syncBreedHeader();
   rebuildData();buildStatePanel();renderAll(true);refreshOpenDetail();
   requestBreedData(true);
@@ -2154,92 +2177,96 @@ breedListEl.addEventListener('change',e=>{
 document.addEventListener('click',e=>{if(!e.target.closest('#breedDD'))closeBreedPanel();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!breedPanel.hidden){closeBreedPanel();breedBtn.focus();}});
 function showCard(s,i){
-  // Lifecycle-aware: the card adapts to what's known. Before entries close it's
-  // an entry-planning view; after close, the deadline stuff falls away; once the
-  // judging program exists it becomes a day-of view and the judges move into the
-  // ring panel (tied to the ring). Judges ALWAYS come from AKC; the program only
-  // supplies ring / time / running order / this-year count.
+  // Left: the show's facts, adapting to where it is in its lifecycle. Right, once
+  // a judging program exists: one group card, then a card per selected breed,
+  // scrolling sideways however many there are. Breed and group judges come from
+  // AKC where it names them; the program supplies ring / time / running order /
+  // this-year count, plus the judges of groups AKC didn't report for this search.
   const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const bs=s.breeds||[], multi=bs.length>1, prog=bs.length>0&&bs.every(b=>b.rc);
+  const bs=s.breeds||[], multi=bs.length>1, lane=bs.some(b=>b.rc);
   const closed=s.close && pd(s.close) < today;
-  const m=[];
-  m.push('<b>'+esc(s.dates)+'</b>'+(s.comp_type?' · '+esc(s.comp_type):''));
-  if(!prog){
+  const f=[];
+  if(!lane){
     if(multi){
-      bs.filter(b=>!b.rc).forEach(b=>{const j=judgeBits(b);if(j.length)m.push(esc(b.name)+' — '+j.join(' · '));});
-      if(s.bis_judge)m.push('<b>BIS:</b> '+esc(s.bis_judge));
-    }else{
-      const j=bs[0]?judgeBits(bs[0]):[];
-      if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
-      if(j.length)m.push('Judges — '+j.join(' · '));
+      bs.forEach(b=>{const r=judgeRows(b);if(r.length)f.push(fact(b.name,r.map(x=>'<b>'+esc(x[0])+':</b> '+esc(x[1])).join('<br>')));});
+    }else if(bs[0]){
+      judgeRows(bs[0]).forEach(x=>f.push(fact(x[0],esc(x[1]))));
     }
+    if(s.bis_judge)f.push(fact('Best in Show',esc(s.bis_judge)));
+    bs.forEach(b=>{if(b.clcy)f.push(fact(b.name+' last year','<abbr title="'+esc(b.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(b.clcy)+'</abbr>'));});
   }
-  if(s.fee && !prog)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
-  if(closed){ if(s.close)m.push('<span class="eclosed">Entries closed '+esc(s.close)+'</span>'); }
-  else if(s.open||s.close){ m.push('<b>Entries:</b> '+(s.open?('open '+esc(s.open)):'')+(s.open&&s.close?' · ':'')+(s.close?('close '+esc(s.close)):'')); }
-  if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
-  if(s.online && !closed)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
-  if(isOnofrio(s)&&entriesOpen(s))m.push('<a class="enterlink" target="_blank" rel="noopener" href="'+ENTER_ONOFRIO+'">🖊 Enter at Onofrio →</a>');
-  bs.forEach(b=>{if(b.clcy&&!b.rc)m.push('<b>'+esc(b.name)+' last year:</b> <abbr title="'+esc(b.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(b.clcy)+'</abbr>');});
-  if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
-  m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
+  if(s.fee)f.push(fact('Entry fee',fmtFee(s.fee)));
+  if(closed)f.push(fact('Entries','<span class="eclosed">Closed '+esc(fmtDay(s.close))+'</span>'));
+  else if(s.open||s.close)f.push(fact('Entries',[s.open?'Open '+esc(fmtDay(s.open)):'',s.close?'Close '+esc(fmtDay(s.close)):''].filter(Boolean).join(' · ')));
+  if(s.superint)f.push(fact('Superintendent',esc(s.superint)+((s.supt_phone||s.supt_email)?'<span class="ssub">'+[s.supt_phone,s.supt_email].filter(Boolean).map(esc).join(' · ')+'</span>':'')));
+  if(s.docs&&s.docs.length)f.push(fact('Documents',docLinks(s.docs)));
+  const act=[];
+  if(s.online&&!closed)act.push('<a class="sbtn go" target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
+  if(isOnofrio(s)&&entriesOpen(s))act.push('<a class="sbtn go" target="_blank" rel="noopener" href="'+ENTER_ONOFRIO+'">🖊 Enter at Onofrio →</a>');
+  if(s.rcard&&!CUR.rcard)act.push('<a class="sbtn rc" target="_blank" rel="noopener" href="'+esc(s.rcard)+'">🎯 Ring card for this day →</a>');
+  act.push('<a class="sbtn" target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page ↗</a>');
+  act.push('<a class="sbtn" target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>');
+  act.push('<button type="button" class="sbtn" data-ics="'+i+'">Download .ics</button>');
   const tags=(isNatlShow(s)?' <span class="tag natl">★ National Specialty</span>':(s.high_value?' <span class="tag hv">'+esc(specLabel(s.specialty))+'</span>':''))+(s.pended?' <span class="tag pend">PENDED</span>':'');
-  var ringpanel='', grouppanel='', seenGroup={};
-  bs.forEach(function(b){
-    var rc=b.rc;
-    if(!rc)return;
-    var order = rc.ahead>0
-      ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
-      : '<b>first</b> in the ring';
-    // Breed stage — centered, no title
-    ringpanel+='<div class="showring">'+(multi?'<div class="srb">'+esc(b.name)+'</div>':'')+
-      '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
-      (b.breed_judge?'<div class="srj">'+esc(b.breed_judge)+'</div>':'')+
-      '<div class="sra">'+order+'</div>'+
-      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> '+esc(b.name)+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
-      '</div>';
-    // Group stage — the full running order (so you can gauge progress) with the
-    // breed's group highlighted, plus your Reg / NOHS / BIS judges. No title. Two
-    // selected breeds in one group share a panel.
-    var groupKey=(rc.gseq||[]).filter(function(g){return g.mine;}).map(function(g){return g.g;}).join()||b.code;
-    if(seenGroup[groupKey])return;
-    seenGroup[groupKey]=1;
-    var seq=(rc.gseq||[]).map(function(g,ix){
-      return '<div class="grow4'+(g.mine?' gmine':'')+'"><span class="gn">'+(ix+1)+'</span>'+
-        '<span class="gg">'+esc(g.g)+'</span>'+
-        '<span class="ge">'+(g.est?'~'+esc(g.est):'')+'</span></div>';
-    }).join('');
-    var reg=b.group_judge||'', oh=b.nohs_judge||rc.nohs||'', gl='';
-    if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
-    if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
-    if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
-    // Group-timing header: Regular and Owner-Handled (NOHS) each run in their own
-    // ring, and NOHS often starts BEFORE Regular (or "follows each Regular group").
-    // List whichever runs first on top, so the order reads chronologically. Times
-    // are program-printed and can change day-of ("unless otherwise announced").
-    var sess=[];
-    if(rc.gring!=null||rc.gstart)
-      sess.push({lab:'Reg',ring:rc.gring,time:rc.gstart,min:(rc.gmin!=null?rc.gmin:1e9)});
-    if(rc.nring!=null||rc.ntime||rc.nfollows)
-      sess.push({lab:'NOHS',ring:rc.nring,
-                 time:(rc.ntime||(rc.nfollows?'follows each Regular group':'')),
-                 min:(rc.nmin!=null?rc.nmin:1e9)});
-    sess.sort(function(a,b){return a.min-b.min;});
-    var ghdr='';
-    if(sess.length){
-      var rows=sess.map(function(x,ix){
-        var p=[]; if(x.ring!=null)p.push('Ring '+x.ring); if(x.time)p.push(x.time);
-        return '<div class="gsess'+(ix===0?' first':'')+'"><span class="gsl">'+esc(x.lab)+'</span>'+esc(p.join(' · '))+'</div>';
-      }).join('');
-      ghdr='<div class="ghdr">'+rows+'</div>';
-    }
-    var gnote=sess.length?'<div class="gnote">Program order — may change day-of (“unless otherwise announced”)</div>':'';
-    if(seq||gl||ghdr)grouppanel+='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>'+gnote+'</div>';
-  });
-  return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
-    (s.rcard&&!CUR.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(s.rcard)+'">🎯 Ring card for this day →</a>':'')+
-    '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
-    '<button class="ics" data-ics="'+i+'">Download .ics</button></div></div>'+ringpanel+grouppanel+'</div>';
+  return '<div class="showcard"><div class="showinfo'+(lane?'':' solo')+'"><h3>'+esc(s.club)+tags+'</h3>'+
+    '<div class="sdate">'+esc(s.dates)+(s.comp_type?'<span class="stype">'+esc(s.comp_type)+'</span>':'')+'</div>'+
+    (f.length?'<dl class="sfacts">'+f.join('')+'</dl>':'')+
+    '<div class="sact">'+act.join('')+'</div></div>'+
+    (lane?'<div class="showlane">'+groupPanel(s)+bs.map(b=>breedCard(b,multi)).join('')+'</div>':'')+'</div>';
+}
+function breedCard(b,multi){
+  const name=multi?'<div class="srb">'+esc(b.name)+'</div>':'';
+  const judge=b.breed_judge?'<div class="srj">'+esc(b.breed_judge)+'</div>':'';
+  const rc=b.rc;
+  if(!rc)return '<div class="showring">'+name+judge+'<div class="srn">No ring found in this program</div>'+
+    (b.clcy?'<div class="src" title="'+esc(b.clcy_tip||'')+'">Last year <span class="mono">'+esc(b.clcy)+'</span></div>':'')+'</div>';
+  const order=rc.ahead>0
+    ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
+    : '<b>first</b> in the ring';
+  return '<div class="showring">'+name+
+    '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
+    judge+'<div class="sra">'+order+'</div>'+
+    (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> '+esc(b.name)+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
+    '</div>';
+}
+// One running order per show: every selected breed's group is highlighted, any
+// group can be clicked, and the right side shows the clicked group's judges.
+function groupPanel(s){
+  const bs=s.breeds||[],src=bs.find(b=>b.rc);
+  if(!src)return '';
+  const rc=src.rc,seq=rc.gseq||[];
+  const owners=name=>bs.filter(b=>groupKey(groupOf(b.code))===groupKey(name));
+  let pick=groupPick[s.event_no];
+  if(!(pick>=0&&pick<seq.length)){
+    pick=seq.findIndex(g=>owners(g.g).some(b=>b.code===bs[0].code));
+    if(pick<0)pick=seq.findIndex(g=>owners(g.g).length);
+    if(pick<0)pick=0;
+  }
+  const rows=seq.map((g,ix)=>'<button type="button" class="grow4'+(owners(g.g).length?' gmine':'')+(ix===pick?' gsel':'')+'" data-gs="'+esc(s.event_no)+'" data-g="'+ix+'" aria-pressed="'+(ix===pick)+'">'+
+    '<span class="gn">'+(ix+1)+'</span><span class="gg">'+esc(g.g)+'</span><span class="ge">'+(g.est?'~'+esc(g.est):'')+'</span></button>').join('');
+  const g=seq[pick],own=g?owners(g.g):[src];
+  const b=own[0];
+  const reg=(b&&b.group_judge)||(g&&g.j)||'',oh=(b&&b.nohs_judge)||(g&&g.nj)||(b&&b.rc&&b.rc.nohs)||'';
+  const head=own.length?own.map(x=>x.name).join(' & ')+' judges':(g.g+' Group judges');
+  let gl='<div class="gjhead'+(own.length?' own':'')+'">'+esc(head)+'</div>';
+  if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
+  if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
+  if(!reg&&!oh)gl+='<div class="gnone">Not listed in the program</div>';
+  if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
+  // Group-timing header: Regular and Owner-Handled (NOHS) each run in their own
+  // ring, and NOHS often starts BEFORE Regular (or "follows each Regular group").
+  // List whichever runs first on top, so the order reads chronologically. Times
+  // are program-printed and can change day-of ("unless otherwise announced").
+  const sess=[];
+  if(rc.gring!=null||rc.gstart)sess.push({lab:'Reg',ring:rc.gring,time:rc.gstart,min:(rc.gmin!=null?rc.gmin:1e9)});
+  if(rc.nring!=null||rc.ntime||rc.nfollows)sess.push({lab:'NOHS',ring:rc.nring,time:(rc.ntime||(rc.nfollows?'follows each Regular group':'')),min:(rc.nmin!=null?rc.nmin:1e9)});
+  sess.sort((x,y)=>x.min-y.min);
+  const ghdr=sess.length?'<div class="ghdr">'+sess.map((x,ix)=>{
+    const p=[];if(x.ring!=null)p.push('Ring '+x.ring);if(x.time)p.push(x.time);
+    return '<div class="gsess'+(ix===0?' first':'')+'"><span class="gsl">'+esc(x.lab)+'</span>'+esc(p.join(' · '))+'</div>';
+  }).join('')+'</div>':'';
+  const gnote=sess.length?'<div class="gnote">Program order — may change day-of (“unless otherwise announced”)</div>':'';
+  return '<div class="showgroups">'+ghdr+'<div class="gbody">'+(rows?'<div class="gorder">'+rows+'</div>':'')+'<div class="gjudges">'+gl+'</div></div>'+gnote+'</div>';
 }
 function openDetail(c){
   if(!c)return;
@@ -2268,7 +2295,18 @@ function renderDetail(c){
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
 function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
-detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
+detailEl.addEventListener('click',e=>{
+  const b=e.target.closest('[data-ics]');
+  if(b&&CUR){dlIcs(CUR.shows[+b.dataset.ics],CUR);return;}
+  const g=e.target.closest('[data-g]');
+  if(!g||!CUR)return;
+  const s=CUR.shows.find(x=>String(x.event_no)===g.dataset.gs);
+  if(!s)return;
+  groupPick[s.event_no]=+g.dataset.g;
+  const panel=g.closest('.showgroups'),sel='[data-gs="'+g.dataset.gs+'"][data-g="'+g.dataset.g+'"]';
+  panel.outerHTML=groupPanel(s);
+  const again=detailEl.querySelector(sel);if(again)again.focus();
+});
 [fWin,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
 fWin.addEventListener('change',()=>requestBreedData(true));
 q.addEventListener('input',()=>renderAll(false));
@@ -2311,6 +2349,7 @@ requestBreedData(true);
                .replace("__NATL__", _h(national_no))
                .replace("__BREED_API__", _h(BREED_API))
                .replace("__TZINFO__", json.dumps(tzinfo, separators=(",", ":")))
+               .replace("__GROUPS__", json.dumps(GROUP_BY_CODE_PREFIX, separators=(",", ":")))
                .replace("__DATA__", data))
 
 
@@ -2371,27 +2410,29 @@ def _fetch_breed_index():
 def _ring_info(day, entry, code):
     """One breed's ring panel for one day of a judging program."""
     group = GROUP_BY_CODE_PREFIX.get(code[:1], "")
-    def mine(g):
-        return (g.get("group") or "").lower().replace(" group", "").strip() == group.lower()
+    def key(g):
+        return (g.get("group") or "").lower().replace(" group", "").strip()
     grps = day.get("groups") or {}
     reg = grps.get("regular") or {}
     startMin = reg.get("startMin")
+    # program's Owner-Handled (NOHS) block: each group's judge (AKC fallback) plus
+    # its ring + start time. NOHS groups routinely run BEFORE Regular (AKC
+    # recommends >=30 min earlier), and neither the ring nor the time is in the
+    # AKC feed — only the program has them.
+    nohsblk = grps.get("nohs") or {}
+    nohs_judges = {key(g): g.get("judge") or "" for g in (nohsblk.get("order") or [])}
+    nohs = nohs_judges.get(group.lower(), "")
     # full regular group running order with est times (start + i*30, matching
     # the ring card's minPerGroup) so the exhibitor can see who runs before
     # their group and gauge progress through the day. 30 min/group is a rough
     # planning figure (AKC ~2.5 min/dog; a group ring holds one dog per
     # competing breed) — actual length swings with the day's entry, so these
-    # are deliberately "~".
+    # are deliberately "~". Each group's judges are here too, because AKC's feed
+    # only names the judges for the breed being searched.
     gseq = [{"g": g.get("group") or "",
              "est": _hmm(startMin + gi * 30) if startMin is not None else "",
-             "mine": mine(g)}
+             "j": g.get("judge") or "", "nj": nohs_judges.get(key(g), "")}
             for gi, g in enumerate(reg.get("order") or [])]
-    # program's Owner-Handled (NOHS) block: the group's judge (AKC fallback) plus
-    # its ring + start time. NOHS groups routinely run BEFORE Regular (AKC
-    # recommends >=30 min earlier), and neither the ring nor the time is in the
-    # AKC feed — only the program has them.
-    nohsblk = grps.get("nohs") or {}
-    nohs = next((g.get("judge") or "" for g in (nohsblk.get("order") or []) if mine(g)), "")
     return {"ring": entry.get("ring"), "time": entry.get("slotTime"),
             "ahead": entry.get("ahead") or 0, "count": entry.get("entryCount"),
             "split": entry.get("split") or "",
