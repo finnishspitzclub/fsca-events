@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fsca-akc-breeds",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "4033e5d85c344c9b9eec2ad9bb89d0f3" }
+  ],
+  // Caps how fast cache misses can reach AKC, per Cloudflare location.
+  "ratelimits": [
+    { "name": "AKC_LIMIT", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }
+  ]
+}

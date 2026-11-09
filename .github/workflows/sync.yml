@@ -55,12 +55,14 @@ jobs:
 
       - name: Assemble Pages site
         run: |
-          mkdir -p site site/ringcards
+          mkdir -p site site/ringcards site/rings
           cp events-map.html site/index.html
           cp national-card.html site/national.html
           # Finnish Spitz ring cards (generated for Onofrio judging programs);
           # the copy is best-effort — there may be none in a given window.
           cp ringcards/*.html site/ringcards/ 2>/dev/null || echo "no ring cards this run"
+          # Ring and group data for the other breeds in the page's picker.
+          cp rings/*.json site/rings/ 2>/dev/null || echo "no breed ring data this run"
 
       - uses: actions/configure-pages@v5
 

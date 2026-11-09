@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import re
+import unicodedata
 import sqlite3
 import sys
 import time
@@ -55,6 +56,39 @@ NATIONAL_PATH = Path(__file__).with_name("national-card.html")
 RINGCARD_DIR = Path(__file__).with_name("ringcard")            # vendored generator
 RINGCARDS_OUT = Path(__file__).with_name("ringcards")          # generated cards
 RINGCARD_MANIFEST = Path(__file__).with_name("ringcards-manifest.json")
+RINGS_OUT = Path(__file__).with_name("rings")                  # per-breed ring data
+REFERENCES_URL = "https://webapps.akc.org/event-search/api/references/"
+# Serves the page's breed picker (worker/); the page itself only bakes in FS.
+BREED_API = os.environ.get("AKCAL_BREED_API", "https://fsca-akc-breeds.fsca-akc-breeds.workers.dev")
+FS_BREED_CODE = "313"
+# The first digit of an AKC breed code is its group.
+GROUP_BY_CODE_PREFIX = {"1": "Sporting", "2": "Terrier", "3": "Non-Sporting", "4": "Hound",
+                        "5": "Toy", "6": "Working", "8": "Herding"}
+# How judging programs print breeds that AKC's list spells differently. Seen in
+# real programs; anything not here or in AKC's list simply gets no ring panel.
+BREED_ALIASES = {
+    "Bracco Italiani": "Bracco Italiano",
+    "Spinone Italiani": "Spinone Italiano",
+    "Lagoti Romagnoli": "Lagotto Romagnolo",
+    "Lagotto Romagnoli": "Lagotto Romagnolo",
+    "Saint Bernards": "St. Bernard",
+    "Retrievers (NSDT)": "Nova Scotia Duck Tolling Retriever",
+    "Retriever (Nova Scotia Duck Toll)": "Nova Scotia Duck Tolling Retriever",
+    "Beagles (13 Inch)": "Beagle (13 in. and under)",
+    "Beagle Thirteen Inch": "Beagle (13 in. and under)",
+    "Beagles (15 Inch)": "Beagle (over 13 in.)",
+    "Beagle Fifteen Inch": "Beagle (over 13 in.)",
+    "Spaniels (Cocker) Parti-Color": "Spaniel (Cocker) Parti",
+    "Cocker Spaniel (Parti-Color)": "Spaniel (Cocker) Parti",
+    "English Toy Spaniels (KC&R)": "English Toy Spaniel (King Charles & Ruby)",
+    "English Toy Spaniels (K C & R)": "English Toy Spaniel (King Charles & Ruby)",
+    "English Toy Spaniels (Bl & PC)": "English Toy Spaniel (Blenheim & Prince Charles)",
+    "Anatolian Shepherd": "Anatolian Shepherd Dog",
+    "American Eskimos": "American Eskimo Dog",
+    "Am Staffordshire Terriers": "American Staffordshire Terrier",
+    "Cavalier King Charles Span": "Cavalier King Charles Spaniel",
+    "Pointers (German Wire)": "German Wirehaired Pointer",
+}
 # AKC-feed superintendent name (lowercase substring) -> ringcard/extractors name.
 RINGCARD_SUPERS = {"onofrio": "onofrio", "mb-f": "mbf", "foy trent": "foytrent",
                    "baray": "baray", "jim rau": "jimrau", "bradshaw": "bradshaw",
@@ -1416,6 +1450,8 @@ def render_map_html(events, title, subtitle, national_no=""):
         f'<span class="lg"><i style="background:{TZ_HEX[tz]}"></i>{TZ_LABEL[tz]}</span>'
         for tz in ("ET", "CT", "MT", "PT", "AKT", "HAT"))
     data = json.dumps(events, separators=(",", ":")).replace("</", "<\\/")
+    tzinfo = {st: [tz, TZ_HEX.get(tz, DEFAULT_HEX), TZ_LABEL.get(tz, "—")] for st, tz in STATE_TZ.items()}
+    tzinfo[""] = [None, DEFAULT_HEX, "—"]
     tpl = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -1432,6 +1468,18 @@ def render_map_html(events, title, subtitle, national_no=""):
   header p{margin:2px 0 0;font-size:.8rem;opacity:.85}
   .natlbtn{flex:none;background:linear-gradient(135deg,#f6c453,#e0992e);color:#3a2a05;border:0;font:inherit;font-weight:800;font-size:.9rem;padding:9px 16px;border-radius:8px;cursor:pointer;box-shadow:0 1px 3px #0004}
   .natlbtn:hover{filter:brightness(1.06)}
+  header{position:relative;z-index:1100}
+  .brpick{flex:none;display:flex;align-items:center;gap:8px;font-size:.8rem;flex-wrap:wrap}
+  .brpick .msbtn{max-width:250px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#1a1a1a}
+  .brstat{font-size:.75rem;opacity:.92}
+  .brstat button{font:inherit;color:#fff;background:none;border:0;text-decoration:underline;cursor:pointer;padding:0}
+  .brpick .brpanel{left:auto;right:0;width:min(300px,calc(100vw - 28px));max-height:360px;color:#1a1a1a;box-sizing:border-box}
+  .brpick .brpanel input[type=search]{width:100%;box-sizing:border-box;font:inherit;font-size:.85rem;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px}
+  .brhint{font-size:.72rem;color:#667;padding:5px 6px}
+  .brpick .brpanel label{white-space:normal}
+  .brpick .brpanel label.off{opacity:.45;cursor:not-allowed}
+  @media(max-width:520px){.brpick .brpanel{left:0;right:auto}}
+  .srb{font-size:.74rem;font-weight:800;color:#5a4d40;margin-bottom:3px}
   .views{display:flex;flex-wrap:wrap;gap:14px;padding:12px 14px 4px}
   .vpane{flex:1 1 360px;min-width:270px;display:flex;flex-direction:column}
   .ph{font-size:.9rem;font-weight:600;color:#0f2b46;margin:0 0 6px}
@@ -1570,7 +1618,7 @@ def render_map_html(events, title, subtitle, national_no=""):
 </style>
 </head>
 <body>
-  <header><div class="htxt"><h1>__TITLE__</h1><p>__SUBTITLE__</p></div><button id="natlBtn" class="natlbtn" hidden>★ National Specialty →</button></header>
+  <header><div class="htxt"><h1 id="pageTitle">__TITLE__</h1><p id="pageSub">__SUBTITLE__</p></div><div class="brpick"><span class="brstat" id="breedStatus" role="status"></span><span>Breeds</span><div class="msdd" id="breedDD"><button type="button" class="msbtn" id="breedBtn" aria-haspopup="true" aria-expanded="false">Finnish Spitz ▾</button><div class="mspanel brpanel" id="breedPanel" hidden><input type="search" id="breedQ" placeholder="Find a breed…" aria-label="Find a breed"><div class="brhint" id="breedHint"></div><div id="breedList"></div></div></div></div><button id="natlBtn" class="natlbtn" hidden>★ National Specialty →</button></header>
   <div class="views">
     <section class="vpane">
       <div class="calnav"><button id="calPrev" aria-label="Previous month">&lsaquo;</button><button id="calToday">Today</button><span class="ml" id="calLabel"></span><button id="calNext" aria-label="Next month">&rsaquo;</button></div>
@@ -1604,7 +1652,7 @@ def render_map_html(events, title, subtitle, national_no=""):
     <table>
       <thead><tr>
         <th>Dates</th><th>Show(s)</th><th>Location</th><th id="supthdr" title="Superintendent — search a judge's name to swap this to the matched judge">Superintendent</th><th>Zone</th>
-        <th title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
+        <th id="lasthdr" title="Finnish Spitz entered at this site last year (best-attended day)">FS last yr</th><th>Entries close</th><th title="Premium list / entry form — direct PDF from AKC">Premium</th><th title="Judging program — direct PDF from AKC; posts as the show approaches">Program</th><th></th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -1614,12 +1662,23 @@ def render_map_html(events, title, subtitle, national_no=""):
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
-const ALL = __DATA__;
+const FS_ALL = __DATA__;
+let ALL = FS_ALL;
 const NATL = "__NATL__";
+const BREED_API = "__BREED_API__";
+const TZ_INFO = __TZINFO__;
+const FS_CODE='313',FS_NAME='Finnish Spitz',MAX_BREEDS=5;
+// Finnish Spitz is baked in above, so the default view asks nothing of AKC. Any
+// other breed comes from the Worker a month at a time, and the shows are merged
+// and re-clustered here, each show carrying one entry per selected breed in .breeds.
+let selBreeds=[{code:FS_CODE,name:FS_NAME}];
+function hasBreed(code){return selBreeds.some(b=>b.code===code);}
+function onlyFS(){return selBreeds.length===1&&selBreeds[0].code===FS_CODE;}
+FS_ALL.forEach(c=>c.shows.forEach(s=>{s.breeds=[{code:FS_CODE,name:FS_NAME,breed_judge:s.breed_judge,group_judge:s.group_judge,nohs_judge:s.nohs_judge,clcy:s.clcy,clcy_tip:s.clcy_tip,rc:s.rc}];}));
 // The ★ is reserved for the National Specialty. Everything else that's notable
 // (a limited-breed group specialty like Non-Sporting) gets a labeled tag instead,
 // so a normal specialty weekend never looks like the National.
-function isNatlShow(s){return NATL&&String(s.event_no)===String(NATL);}
+function isNatlShow(s){return NATL&&hasBreed(FS_CODE)&&String(s.event_no)===String(NATL);}
 function isNatl(c){return NATL&&c.shows&&c.shows.some(isNatlShow);}
 function specLabel(spec){
   const base=String(spec||'').replace(/\s*group(\s*show)?\s*$/i,'').trim();
@@ -1639,9 +1698,10 @@ function pd(s){const p=String(s).split('-');return new Date(+p[0],+p[1]-1,+p[2])
 // Highlight every occurrence of an already-lowercased search term in text.
 function hl(text,term){var s=String(text==null?'':text);if(!term)return esc(s);var i=s.toLowerCase().indexOf(term);if(i<0)return esc(s);return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+term.length))+'</mark>'+hl(s.slice(i+term.length),term);}
 const JROLES=[['breed_judge','Breed'],['group_judge','Group'],['nohs_judge','NOHS'],['bis_judge','BIS']];
-function judgeHay(c){return (c.shows||[]).map(function(s){return JROLES.map(function(r){return s[r[0]]||'';}).join(' ');}).join(' ');}
+function judgeVals(s,key){return key==='bis_judge'?[s.bis_judge||'']:(s.breeds||[]).map(function(b){return b[key]||'';});}
+function judgeHay(c){return (c.shows||[]).map(function(s){return JROLES.map(function(r){return judgeVals(s,r[0]).join(' ');}).join(' ');}).join(' ');}
 // First judge (by role priority) across a cluster's shows whose name contains term.
-function judgeMatch(c,term){if(!term)return null;var sh=c.shows||[];for(var r=0;r<JROLES.length;r++)for(var i=0;i<sh.length;i++){var v=sh[i][JROLES[r][0]]||'';if(v.toLowerCase().indexOf(term)>=0)return {name:v,role:JROLES[r][1]};}return null;}
+function judgeMatch(c,term){if(!term)return null;var sh=c.shows||[];for(var r=0;r<JROLES.length;r++)for(var i=0;i<sh.length;i++){var vs=judgeVals(sh[i],JROLES[r][0]);for(var k=0;k<vs.length;k++){if(vs[k].toLowerCase().indexOf(term)>=0)return {name:vs[k],role:JROLES[r][1]};}}return null;}
 const ENTER_ONOFRIO='https://www.onofrio.com/cgi-bin/db2www/showentry/enter';
 function isOnofrio(s){return /onofrio/i.test((s&&s.superint)||'');}
 function entriesOpen(s){if(!s||!s.close)return false;const t=new Date(),today=new Date(t.getFullYear(),t.getMonth(),t.getDate());return pd(s.close)>=today;}
@@ -1653,7 +1713,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,att
 const markers=L.layerGroup().addTo(map);
 const q=document.getElementById('q'),fWin=document.getElementById('fWin'),fHv=document.getElementById('fHv'),rowsEl=document.getElementById('rows'),countEl=document.getElementById('count'),emptyEl=document.getElementById('empty'),detailEl=document.getElementById('detail');
 const calGrid=document.getElementById('calGrid'),calLabel=document.getElementById('calLabel'),calPrev=document.getElementById('calPrev'),calNext=document.getElementById('calNext'),calToday=document.getElementById('calToday'),tableWrap=document.querySelector('.tablewrap');
-const AIDX=new Map(ALL.map((c,i)=>[c,i]));
+let AIDX=new Map(ALL.map((c,i)=>[c,i]));
 let markerByAi={},SELMK=null,calMonth=null;
 // Timezones = toggle chips (multi). States = a checkbox dropdown whose options
 // are limited to the selected zones, so you can't pick a state outside them
@@ -1671,7 +1731,7 @@ statePanel.addEventListener('change',function(e){var cb=e.target;if(cb&&cb.match
 document.addEventListener('click',function(e){if(!e.target.closest('#stateDD'))statePanel.hidden=true;});
 clearBtn.addEventListener('click',function(){selZones.clear();selStates.clear();q.value='';fHv.checked=false;fWin.value='60';[...zoneWrap.querySelectorAll('.zchip')].forEach(function(b){b.classList.remove('on');});buildStatePanel();updateStateBtn();statePanel.hidden=true;renderAll(true);});
 // Persist the filter set across visits (per browser) so a planner's view sticks.
-function saveFilters(){try{localStorage.setItem('fsca_filters',JSON.stringify({q:q.value,win:fWin.value,hv:fHv.checked,zones:[...selZones],states:[...selStates]}));}catch(e){}}
+function saveFilters(){try{localStorage.setItem('fsca_filters',JSON.stringify({q:q.value,win:fWin.value,hv:fHv.checked,zones:[...selZones],states:[...selStates],breeds:selBreeds}));}catch(e){}}
 function loadFilters(){
   var f=null;try{f=JSON.parse(localStorage.getItem('fsca_filters')||'null');}catch(e){}
   if(f){
@@ -1680,6 +1740,8 @@ function loadFilters(){
     if(typeof f.hv==='boolean')fHv.checked=f.hv;
     (f.zones||[]).forEach(z=>selZones.add(z));
     (f.states||[]).forEach(s=>selStates.add(s));
+    const saved=(Array.isArray(f.breeds)?f.breeds:[]).filter(b=>b&&/^\d{3}$/.test(b.code)&&typeof b.name==='string').slice(0,MAX_BREEDS);
+    if(saved.length)selBreeds=saved.map(b=>({code:b.code,name:b.name}));
     [...zoneWrap.querySelectorAll('.zchip')].forEach(function(b){if(selZones.has(b.dataset.tz))b.classList.add('on');});
     syncStatesToZones();
   }
@@ -1746,6 +1808,7 @@ function render(refit){
   }).join('');
   var sh=document.getElementById('supthdr');if(sh)sh.textContent=anyJudge?'Judge':'Superintendent';
   countEl.textContent=shown.length+' listing'+(shown.length===1?'':'s')+' · '+shows+' show'+(shows===1?'':'s');
+  emptyEl.textContent=breedsLoading()?'Loading shows from AKC…':'No shows match those filters.';
   emptyEl.style.display=shown.length?'none':'block';
 }
 function renderCal(){
@@ -1802,16 +1865,19 @@ function highlight(ai){
 }
 rowsEl.addEventListener('click',e=>{if(e.target.closest('a'))return;const tr=e.target.closest('tr[data-ai]');if(tr)openDetail(ALL[+tr.dataset.ai]);});
 calGrid.addEventListener('click',e=>{const b=e.target.closest('.calbar[data-ai]');if(b)openDetail(ALL[+b.dataset.ai]);});
-calPrev.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);renderCal();});
-calNext.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);renderCal();});
-calToday.addEventListener('click',()=>{const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);renderCal();});
+calPrev.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1);renderCal();requestBreedData(false);});
+calNext.addEventListener('click',()=>{calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1);renderCal();requestBreedData(false);});
+calToday.addEventListener('click',()=>{const n=new Date();calMonth=new Date(n.getFullYear(),n.getMonth(),1);renderCal();requestBreedData(false);});
 function descText(s,c){
   const L=[];
   if(s.close)L.push('Entries close: '+s.close);
   if(s.online)L.push('Enter online: '+s.online);
   if(s.superint)L.push('Superintendent: '+s.superint);
-  if(s.breed_judge)L.push('Breed judge: '+s.breed_judge);
-  if(s.clcy)L.push('Finnish Spitz entered last year: '+s.clcy);
+  const bs=s.breeds||[];
+  bs.forEach(b=>{
+    if(b.breed_judge)L.push((bs.length>1?b.name+' judge: ':'Breed judge: ')+b.breed_judge);
+    if(b.clcy)L.push(b.name+' entered last year: '+b.clcy);
+  });
   L.push('AKC: '+AKC+s.event_no);
   return L.join('\n');
 }
@@ -1833,6 +1899,260 @@ function dlIcs(s,c){
   document.body.appendChild(a);a.click();a.remove();
 }
 let CUR=null;
+function judgeBits(b){
+  const j=[];
+  if(b.breed_judge&&b.breed_judge===b.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(b.breed_judge));}
+  else{if(b.breed_judge)j.push('<b>Breed:</b> '+esc(b.breed_judge));if(b.group_judge)j.push('<b>Group:</b> '+esc(b.group_judge));}
+  if(b.nohs_judge)j.push('<b>NOHS Group:</b> '+esc(b.nohs_judge));
+  return j;
+}
+// ---- clustering: the browser's copy of cluster_events/_make_cluster in akcal.py
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function dayLabel(d){return DOW[d.getDay()]+' '+MON[d.getMonth()]+' '+d.getDate();}
+function spanLabel(a,b){
+  const sd=pd(a),ed=pd(b);
+  if(a===b)return dayLabel(sd)+', '+sd.getFullYear();
+  if(sd.getFullYear()!==ed.getFullYear())return dayLabel(sd)+', '+sd.getFullYear()+' – '+dayLabel(ed)+', '+ed.getFullYear();
+  return dayLabel(sd)+' – '+dayLabel(ed)+', '+ed.getFullYear();
+}
+function shortSupt(name){
+  const n=String(name||'').trim();
+  if(!n)return '';
+  return n.split(/,|\bDog Shows\b|\bEvent Services\b|\bDog Show\b|\bInc\.?|\bL\.?L\.?C\.?\b/i)[0].replace(/^[ ,.]+|[ ,.]+$/g,'')||n;
+}
+function clcyTip(v,name){
+  const m=/^\s*(\d+)-(\d+)-(\d+)\s*\((\d+)-(\d+)\)\s*(\d+)\s*$/.exec(String(v||''));
+  if(!m)return '';
+  const n=(k,one,many)=>k+' '+(+k===1?one:many);
+  const bits=[n(m[2],'class dog','class dogs'),n(m[3],'class bitch','class bitches'),n(m[4],'champion dog','champion dogs'),n(m[5],'champion bitch','champion bitches')];
+  if(+m[6])bits.push(n(m[6],'veteran','veterans'));
+  return m[1]+' '+name+' total — '+bits.join(', ');
+}
+function isoPlusDay(s){const d=pd(s);d.setDate(d.getDate()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+// Best-attended day per breed at a site; with several breeds, their sum and a breakdown.
+function lastYear(members){
+  const best={};
+  members.forEach(m=>(m.breeds||[]).forEach(b=>{
+    const hit=/^\s*(\d+)/.exec(String(b.clcy||''));
+    if(hit&&(!best[b.code]||+hit[1]>best[b.code].n))best[b.code]={n:+hit[1],name:b.name,tip:b.clcy_tip};
+  }));
+  const v=Object.values(best);
+  if(!v.length)return {n:null,tip:''};
+  if(selBreeds.length===1)return {n:v[0].n,tip:v[0].tip||''};
+  return {n:v.reduce((t,x)=>t+x.n,0),tip:v.map(x=>x.name+': '+x.n).join(' · ')+' (best day for each)'};
+}
+function makeCluster(members,start,end){
+  const m0=members[0],z=TZ_INFO[String(m0.state||'').trim().toUpperCase()]||TZ_INFO[''];
+  const clubs=[...new Set(members.map(m=>m.club))];
+  const supts=[...new Set(members.filter(m=>m.superint).map(m=>shortSupt(m.superint)))];
+  const closes=members.map(m=>m.close).filter(Boolean).sort();
+  const seen=new Set(),docs=[],ord={PRMLST:0,JDGPRO:1,ENTFRM:2,EVNINF:3},dr=d=>d.code in ord?ord[d.code]:9;
+  members.forEach(m=>(m.docs||[]).forEach(d=>{if(!seen.has(d.url)){seen.add(d.url);docs.push(d);}}));
+  docs.sort((a,b)=>dr(a)-dr(b));
+  const last=lastYear(members);
+  const c={start,end,dates:spanLabel(start,end),tz:z[0],tzLabel:z[2],color:z[1],state:m0.state,city:m0.city,venue:m0.venue,
+    where:[m0.city,m0.state].filter(Boolean).join(', '),lat:m0.lat,lon:m0.lon,
+    label:clubs.length===1?clubs[0]:(m0.venue||m0.city||'Show cluster'),clubs,n:members.length,
+    superint:supts[0]||'',supts,high_value:members.some(m=>m.high_value),pended:members.some(m=>m.pended),
+    close:closes[0]||'',fs_last:last.n,fs_last_tip:last.tip,docs,event_no:m0.event_no,shows:members};
+  const cards=new Set(members.filter(m=>m.rcard).map(m=>m.rcard));
+  if(cards.size===1)c.rcard=[...cards][0];
+  return c;
+}
+function clusterShows(list){
+  const bySite=new Map();
+  list.forEach(s=>{
+    const site=(s.lat!=null&&s.lon!=null)?(s.lat.toFixed(3)+','+s.lon.toFixed(3))
+      :([String(s.venue||'').trim().toLowerCase(),s.city||'',s.state||''].filter(Boolean).join('|')||s.event_no);
+    if(!bySite.has(site))bySite.set(site,[]);
+    bySite.get(site).push(s);
+  });
+  const out=[];
+  bySite.forEach(group=>{
+    group.sort((a,b)=>a.start<b.start?-1:a.start>b.start?1:a.end<b.end?-1:a.end>b.end?1:0);
+    let cur=null;
+    group.forEach(s=>{
+      if(cur&&s.start<=isoPlusDay(cur.end)){cur.members.push(s);if(s.end>cur.end)cur.end=s.end;}
+      else{if(cur)out.push(makeCluster(cur.members,cur.start,cur.end));cur={members:[s],start:s.start,end:s.end};}
+    });
+    if(cur)out.push(makeCluster(cur.members,cur.start,cur.end));
+  });
+  return out.sort((a,b)=>a.start<b.start?-1:a.start>b.start?1:0);
+}
+// ---- breed data: FS from the page, everything else from the Worker
+const monthStore=new Map();  // 'code|YYYY-MM' -> {shows} | {loading:true} | {error:true}
+const ringData=new Map();    // code -> {event_no: ring info}, prebuilt each sync
+const fetchQ=[];
+let inFlight=0,rebuildTimer=null,refitPending=false,natlReady=false;
+function monthKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function selectedEntries(){return [...monthStore.entries()].filter(e=>hasBreed(e[0].split('|')[0]));}
+function breedsLoading(){return selectedEntries().some(e=>e[1].loading);}
+function monthsNeeded(){
+  const now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  let span=18;
+  if(fWin.value!=='all'){const e=new Date(y,m,now.getDate()+(+fWin.value));span=(e.getFullYear()-y)*12+e.getMonth()-m;}
+  const out=[];
+  // Early in a month, a show weekend can still reach back across the 1st.
+  if(now.getDate()<=7)out.push(monthKey(new Date(y,m-1,1)));
+  for(let i=0;i<=span;i++)out.push(monthKey(new Date(y,m+i,1)));
+  if(calMonth){
+    const off=(calMonth.getFullYear()-y)*12+calMonth.getMonth()-m;
+    if(off>=-1&&off<=18&&!out.includes(monthKey(calMonth)))out.push(monthKey(calMonth));
+  }
+  return out;
+}
+function requestBreedData(refit){
+  if(refit)refitPending=true;
+  selBreeds.forEach(b=>{
+    if(b.code===FS_CODE)return;
+    if(!ringData.has(b.code))loadRings(b.code);
+    monthsNeeded().forEach(month=>{
+      const key=b.code+'|'+month;
+      if(!monthStore.has(key)){monthStore.set(key,{loading:true});fetchQ.push({code:b.code,month,key,tries:0});}
+    });
+  });
+  pump();
+  updateBreedStatus();
+  if(refitPending&&!breedsLoading())scheduleRebuild();
+}
+function loadRings(code){
+  ringData.set(code,{});
+  fetch('rings/'+code+'.json').then(r=>r.ok?r.json():null).then(d=>{if(d){ringData.set(code,d);scheduleRebuild();}}).catch(()=>{});
+}
+function pump(){
+  while(inFlight<2&&fetchQ.length){
+    const job=fetchQ.shift();
+    if(!hasBreed(job.code)){monthStore.delete(job.key);continue;}
+    inFlight++;
+    fetch(BREED_API+'/shows?breed='+job.code+'&month='+job.month)
+      .then(r=>{
+        if(r.status===429&&job.tries<5){job.tries++;setTimeout(()=>{fetchQ.push(job);pump();},12000);return null;}
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(d=>{if(d)monthStore.set(job.key,{shows:d.shows||[]});})
+      .catch(()=>{monthStore.set(job.key,{error:true});})
+      .finally(()=>{inFlight--;pump();updateBreedStatus();scheduleRebuild();});
+  }
+}
+function updateBreedStatus(){
+  const el=document.getElementById('breedStatus'),ents=selectedEntries();
+  const left=ents.filter(e=>e[1].loading).length,failed=ents.some(e=>e[1].error);
+  if(left){el.textContent='Loading shows from AKC…';return;}
+  if(failed){
+    el.innerHTML='Some shows couldn’t be loaded. <button type="button" id="breedRetry">Try again</button>';
+    document.getElementById('breedRetry').addEventListener('click',()=>{ents.forEach(e=>{if(e[1].error)monthStore.delete(e[0]);});requestBreedData(false);});
+    return;
+  }
+  el.textContent='';
+}
+function rebuildData(){
+  if(onlyFS())ALL=FS_ALL;
+  else{
+    const byNo=new Map();
+    if(hasBreed(FS_CODE))FS_ALL.forEach(c=>c.shows.forEach(s=>byNo.set(String(s.event_no),Object.assign({},s,{breeds:s.breeds.slice(),venue:c.venue,city:c.city,state:c.state,lat:c.lat,lon:c.lon}))));
+    selBreeds.forEach(b=>{
+      if(b.code===FS_CODE)return;
+      const rings=ringData.get(b.code)||{};
+      monthStore.forEach((v,k)=>{
+        if(!v.shows||k.split('|')[0]!==b.code)return;
+        v.shows.forEach(rec=>{
+          const no=String(rec.event_no);
+          let s=byNo.get(no);
+          if(!s){s=Object.assign({},rec,{dates:spanLabel(rec.start,rec.end),clcy_tip:'',breeds:[]});byNo.set(no,s);}
+          if(!s.breeds.some(x=>x.code===b.code))s.breeds.push({code:b.code,name:b.name,breed_judge:rec.breed_judge,group_judge:rec.group_judge,nohs_judge:rec.nohs_judge,clcy:rec.clcy,clcy_tip:clcyTip(rec.clcy,b.name),rc:rings[no]});
+        });
+      });
+    });
+    ALL=clusterShows([...byNo.values()]);
+  }
+  AIDX=new Map(ALL.map((c,i)=>[c,i]));
+}
+function refreshOpenDetail(){
+  if(!CUR)return;
+  const nos=new Set(CUR.shows.map(s=>String(s.event_no)));
+  const c=ALL.find(x=>x.shows.some(s=>nos.has(String(s.event_no))));
+  if(!c){closeDetail();return;}
+  CUR=c;
+  const top=detailEl.scrollTop;
+  renderDetail(c);
+  detailEl.scrollTop=top;
+  highlight(AIDX.get(c));
+}
+function scheduleRebuild(){
+  clearTimeout(rebuildTimer);
+  rebuildTimer=setTimeout(()=>{
+    const refit=refitPending&&!breedsLoading();
+    if(refit)refitPending=false;
+    rebuildData();buildStatePanel();renderAll(refit);refreshOpenDetail();
+  },150);
+}
+// ---- the picker
+const breedBtn=document.getElementById('breedBtn'),breedPanel=document.getElementById('breedPanel'),breedQ=document.getElementById('breedQ'),breedListEl=document.getElementById('breedList'),breedHint=document.getElementById('breedHint');
+let breedList=null,breedOrder=[],breedListState='';
+function breedSummary(){return selBreeds[0].name+(selBreeds.length>1?' + '+(selBreeds.length-1)+' more':'');}
+const BASE_SUB=document.getElementById('pageSub').textContent;
+function syncBreedHeader(){
+  const title=breedSummary()+' — AKC Events',last=document.getElementById('lasthdr'),natl=document.getElementById('natlBtn');
+  document.getElementById('pageTitle').textContent=title;
+  document.title=title;
+  document.getElementById('pageSub').textContent=onlyFS()?BASE_SUB:'Live from AKC · filter & click any show below';
+  breedBtn.textContent=breedSummary()+' ▾';
+  last.textContent=onlyFS()?'FS last yr':'Last yr';
+  last.title=(selBreeds.length===1?selBreeds[0].name:'Selected breeds')+' entered at this site last year (best-attended day)';
+  if(natl&&natlReady)natl.hidden=!hasBreed(FS_CODE);
+}
+function setBreeds(next){
+  selBreeds=next;
+  syncBreedHeader();
+  rebuildData();buildStatePanel();renderAll(true);refreshOpenDetail();
+  requestBreedData(true);
+}
+// Selected breeds float to the top when the panel opens, then hold still while you tick.
+function orderBreeds(){breedOrder=[...selBreeds].concat((breedList||[]).filter(b=>!hasBreed(b.code)));}
+function renderBreedList(){
+  const full=selBreeds.length>=MAX_BREEDS;
+  breedHint.textContent=full?'That’s the most you can pick at once ('+MAX_BREEDS+'). Untick one to swap.':'Pick up to '+MAX_BREEDS+'.';
+  if(!breedList){
+    const fsRow=breedListState==='error'?'<div class="brhint">Couldn’t load the breed list. Close this and try again.</div>':'<div class="brhint">Loading breeds…</div>';
+    breedListEl.innerHTML=fsRow;
+    return;
+  }
+  const term=breedQ.value.trim().toLowerCase();
+  const rows=breedOrder.filter(b=>!term||(b.name+' '+(b.aka||'')).toLowerCase().includes(term));
+  breedListEl.innerHTML=rows.length?rows.map(b=>{
+    const on=hasBreed(b.code),off=(full&&!on)||(on&&selBreeds.length===1);
+    return '<label'+(off?' class="off"':'')+'><input type="checkbox" value="'+esc(b.code)+'"'+(on?' checked':'')+(off?' disabled':'')+'> '+esc(b.name)+'</label>';
+  }).join(''):'<div class="brhint">No breed by that name.</div>';
+}
+function loadBreedList(){
+  if(breedList||breedListState==='loading')return;
+  breedListState='loading';
+  fetch(BREED_API+'/breeds').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(d=>{breedList=d.breeds||[];breedListState='';orderBreeds();})
+    .catch(()=>{breedListState='error';})
+    .finally(renderBreedList);
+}
+function closeBreedPanel(){breedPanel.hidden=true;breedBtn.setAttribute('aria-expanded','false');}
+breedBtn.addEventListener('click',e=>{
+  e.stopPropagation();
+  if(!breedPanel.hidden){closeBreedPanel();return;}
+  breedPanel.hidden=false;
+  breedBtn.setAttribute('aria-expanded','true');
+  breedQ.value='';orderBreeds();loadBreedList();renderBreedList();
+  breedQ.focus();
+});
+breedQ.addEventListener('input',renderBreedList);
+breedListEl.addEventListener('change',e=>{
+  const cb=e.target;
+  if(!cb||!cb.matches('input[type=checkbox]'))return;
+  const b=breedOrder.find(x=>x.code===cb.value);
+  if(!b)return;
+  setBreeds(cb.checked?selBreeds.concat([{code:b.code,name:b.name}]):selBreeds.filter(x=>x.code!==b.code));
+  renderBreedList();
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#breedDD'))closeBreedPanel();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!breedPanel.hidden){closeBreedPanel();breedBtn.focus();}});
 function showCard(s,i){
   // Lifecycle-aware: the card adapts to what's known. Before entries close it's
   // an entry-planning view; after close, the deadline stuff falls away; once the
@@ -1840,17 +2160,19 @@ function showCard(s,i){
   // ring panel (tied to the ring). Judges ALWAYS come from AKC; the program only
   // supplies ring / time / running order / this-year count.
   const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const prog=!!s.rc;
+  const bs=s.breeds||[], multi=bs.length>1, prog=bs.length>0&&bs.every(b=>b.rc);
   const closed=s.close && pd(s.close) < today;
   const m=[];
   m.push('<b>'+esc(s.dates)+'</b>'+(s.comp_type?' · '+esc(s.comp_type):''));
   if(!prog){
-    const j=[];
-    if(s.breed_judge&&s.breed_judge===s.group_judge){j.push('<b>Breed &amp; Group:</b> '+esc(s.breed_judge));}
-    else{if(s.breed_judge)j.push('<b>Breed:</b> '+esc(s.breed_judge));if(s.group_judge)j.push('<b>Group:</b> '+esc(s.group_judge));}
-    if(s.nohs_judge)j.push('<b>NOHS Group:</b> '+esc(s.nohs_judge));
-    if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
-    if(j.length)m.push('Judges — '+j.join(' · '));
+    if(multi){
+      bs.filter(b=>!b.rc).forEach(b=>{const j=judgeBits(b);if(j.length)m.push(esc(b.name)+' — '+j.join(' · '));});
+      if(s.bis_judge)m.push('<b>BIS:</b> '+esc(s.bis_judge));
+    }else{
+      const j=bs[0]?judgeBits(bs[0]):[];
+      if(s.bis_judge)j.push('<b>BIS:</b> '+esc(s.bis_judge));
+      if(j.length)m.push('Judges — '+j.join(' · '));
+    }
   }
   if(s.fee && !prog)m.push('<b>Entry fee:</b> '+fmtFee(s.fee));
   if(closed){ if(s.close)m.push('<span class="eclosed">Entries closed '+esc(s.close)+'</span>'); }
@@ -1858,31 +2180,36 @@ function showCard(s,i){
   if(s.superint){let sup=esc(s.superint);if(s.supt_phone)sup+=' · '+esc(s.supt_phone);if(s.supt_email)sup+=' · '+esc(s.supt_email);m.push('<b>Superintendent:</b> '+sup);}
   if(s.online && !closed)m.push('<a target="_blank" rel="noopener" href="'+esc(s.online)+'">Enter online →</a>');
   if(isOnofrio(s)&&entriesOpen(s))m.push('<a class="enterlink" target="_blank" rel="noopener" href="'+ENTER_ONOFRIO+'">🖊 Enter at Onofrio →</a>');
-  if(s.clcy && !prog)m.push('<b>Finnish Spitz last year:</b> <abbr title="'+esc(s.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(s.clcy)+'</abbr>');
+  bs.forEach(b=>{if(b.clcy&&!b.rc)m.push('<b>'+esc(b.name)+' last year:</b> <abbr title="'+esc(b.clcy_tip||'')+'" style="text-decoration:underline dotted;cursor:help">'+esc(b.clcy)+'</abbr>');});
   if(s.docs&&s.docs.length)m.push('<b>Documents:</b> '+docLinks(s.docs));
   m.push('<a target="_blank" rel="noopener" href="'+AKC+encodeURIComponent(s.event_no)+'">AKC event page →</a>');
   const tags=(isNatlShow(s)?' <span class="tag natl">★ National Specialty</span>':(s.high_value?' <span class="tag hv">'+esc(specLabel(s.specialty))+'</span>':''))+(s.pended?' <span class="tag pend">PENDED</span>':'');
-  var ringpanel='', grouppanel='';
-  if(prog){
-    var rc=s.rc;
+  var ringpanel='', grouppanel='', seenGroup={};
+  bs.forEach(function(b){
+    var rc=b.rc;
+    if(!rc)return;
     var order = rc.ahead>0
       ? ('<b>'+rc.ahead+'</b> ahead'+(rc.prev?' · after '+esc(rc.prev)+(rc.prevN?' ×'+rc.prevN:''):''))
       : '<b>first</b> in the ring';
     // Breed stage — centered, no title
-    ringpanel='<div class="showring">'+
+    ringpanel+='<div class="showring">'+(multi?'<div class="srb">'+esc(b.name)+'</div>':'')+
       '<div class="srbig"><span class="srring">Ring '+esc(rc.ring)+'</span>'+(rc.time?'<span class="srt">'+esc(rc.time)+'</span>':'')+'</div>'+
-      (s.breed_judge?'<div class="srj">'+esc(s.breed_judge)+'</div>':'')+
+      (b.breed_judge?'<div class="srj">'+esc(b.breed_judge)+'</div>':'')+
       '<div class="sra">'+order+'</div>'+
-      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> Finnish Spitz'+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
+      (rc.count!=null?'<div class="src"><b>'+esc(rc.count)+'</b> '+esc(b.name)+(rc.split?' · <span class="mono">'+esc(rc.split)+'</span>':'')+'</div>':'')+
       '</div>';
     // Group stage — the full running order (so you can gauge progress) with the
-    // Non-Sporting group highlighted, plus your Reg / NOHS / BIS judges. No title.
+    // breed's group highlighted, plus your Reg / NOHS / BIS judges. No title. Two
+    // selected breeds in one group share a panel.
+    var groupKey=(rc.gseq||[]).filter(function(g){return g.mine;}).map(function(g){return g.g;}).join()||b.code;
+    if(seenGroup[groupKey])return;
+    seenGroup[groupKey]=1;
     var seq=(rc.gseq||[]).map(function(g,ix){
       return '<div class="grow4'+(g.mine?' gmine':'')+'"><span class="gn">'+(ix+1)+'</span>'+
         '<span class="gg">'+esc(g.g)+'</span>'+
         '<span class="ge">'+(g.est?'~'+esc(g.est):'')+'</span></div>';
     }).join('');
-    var reg=s.group_judge||'', oh=s.nohs_judge||rc.nohs||'', gl='';
+    var reg=b.group_judge||'', oh=b.nohs_judge||rc.nohs||'', gl='';
     if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
     if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
     if(s.bis_judge)gl+='<div class="grow3"><span class="grl b">BIS</span> '+esc(s.bis_judge)+'</div>';
@@ -1907,8 +2234,8 @@ function showCard(s,i){
       ghdr='<div class="ghdr">'+rows+'</div>';
     }
     var gnote=sess.length?'<div class="gnote">Program order — may change day-of (“unless otherwise announced”)</div>':'';
-    if(seq||gl||ghdr)grouppanel='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>'+gnote+'</div>';
-  }
+    if(seq||gl||ghdr)grouppanel+='<div class="showgroups">'+ghdr+'<div class="gbody">'+(seq?'<div class="gorder">'+seq+'</div>':'')+(gl?'<div class="gjudges">'+gl+'</div>':'')+'</div>'+gnote+'</div>';
+  });
   return '<div class="showcard"><div class="showmain"><h3>'+esc(s.club)+tags+'</h3><div class="meta">'+m.join('<br>')+'</div>'+
     (s.rcard&&!CUR.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(s.rcard)+'">🎯 Ring card for this day →</a>':'')+
     '<div class="addcal"><a target="_blank" rel="noopener" href="'+gcalHref(s,CUR)+'">＋ Google Calendar</a>'+
@@ -1919,6 +2246,15 @@ function openDetail(c){
   CUR=c;
   const _sd=pd(c.start);calMonth=new Date(_sd.getFullYear(),_sd.getMonth(),1);renderCal();
   highlight(AIDX.get(c));
+  renderDetail(c);
+  tableWrap.style.display='none';
+  detailEl.style.display='block';
+  detailEl.classList.remove('fade');void detailEl.offsetWidth;detailEl.classList.add('fade');
+  detailEl.setAttribute('aria-hidden','false');
+  detailEl.scrollTop=0;
+  detailEl.scrollIntoView({block:'nearest'});
+}
+function renderDetail(c){
   const loc=[c.venue,c.where].filter(Boolean).join(', ');
   const mapLink=loc?'<a target="_blank" rel="noopener" href="'+MAPS+encodeURIComponent(loc)+'">'+esc(loc)+' ↗</a>':'';
   let html='<div class="dhead"><button class="back" id="dback">‹ Back</button>'+
@@ -1926,28 +2262,30 @@ function openDetail(c){
     '<div class="body"><p class="csum">'+(mapLink?('📍 '+mapLink+' · '):'')+c.n+' show'+(c.n===1?'':'s')+' at this site</p>'+
     (c.rcard?'<a class="rcardbtn" target="_blank" rel="noopener" href="'+esc(c.rcard)+'">🎯 Finnish Spitz ring card — when &amp; where FS shows, per day →</a>':'')+
     c.shows.map((s,i)=>showCard(s,i)).join('')+
-    (c.shows.some(s=>s.clcy)?'<p class="clkey"><b>Reading the Finnish Spitz count:</b> total – class dogs – class bitches (champion dogs – champion bitches) veterans. Hover the number for the plain-English breakdown.</p>':'')+
+    (c.shows.some(s=>(s.breeds||[]).some(b=>b.clcy))?'<p class="clkey"><b>Reading the '+esc(selBreeds.length===1?selBreeds[0].name:'entry')+' count:</b> total – class dogs – class bitches (champion dogs – champion bitches) veterans. Hover the number for the plain-English breakdown.</p>':'')+
     '</div>';
   detailEl.innerHTML=html;
-  tableWrap.style.display='none';
-  detailEl.style.display='block';
-  detailEl.classList.remove('fade');void detailEl.offsetWidth;detailEl.classList.add('fade');
-  detailEl.setAttribute('aria-hidden','false');
-  detailEl.scrollTop=0;
-  detailEl.scrollIntoView({block:'nearest'});
   document.getElementById('dback').addEventListener('click',closeDetail);
 }
 function closeDetail(){detailEl.style.display='none';tableWrap.style.display='';tableWrap.classList.remove('fade');void tableWrap.offsetWidth;tableWrap.classList.add('fade');detailEl.setAttribute('aria-hidden','true');CUR=null;if(location.hash)history.replaceState(null,'',location.pathname+location.search);}
 detailEl.addEventListener('click',e=>{const b=e.target.closest('[data-ics]');if(b&&CUR)dlIcs(CUR.shows[+b.dataset.ics],CUR);});
 [fWin,fHv].forEach(el=>el.addEventListener('change',()=>renderAll(true)));
+fWin.addEventListener('change',()=>requestBreedData(true));
 q.addEventListener('input',()=>renderAll(false));
+rebuildData();buildStatePanel();
 renderAll(true);
 window.addEventListener('resize',()=>{try{map.invalidateSize();}catch(_){}});
 setTimeout(()=>{try{map.invalidateSize();}catch(_){}},250);
 function openFromHash(){
   const m=/#show=([\w-]+)/.exec(location.hash);
   if(!m)return;
-  const c=ALL.find(c=>c.shows.some(s=>String(s.event_no)===m[1]));
+  const has=c=>c.shows.some(s=>String(s.event_no)===m[1]);
+  let c=ALL.find(has);
+  // A shared link names a Finnish Spitz show; a saved picker may have dropped FS.
+  if(!c&&FS_ALL.some(has)){
+    setBreeds([{code:FS_CODE,name:FS_NAME}].concat(selBreeds).slice(0,MAX_BREEDS));
+    c=ALL.find(has);
+  }
   if(c)openDetail(c);
 }
 window.addEventListener('hashchange',openFromHash);
@@ -1955,12 +2293,14 @@ openFromHash();
 (function(){
   const btn=document.getElementById('natlBtn');
   if(!btn||!NATL)return;
-  const nc=ALL.find(c=>c.shows.some(s=>String(s.event_no)===String(NATL)));
+  const nc=FS_ALL.find(c=>c.shows.some(s=>String(s.event_no)===String(NATL)));
   if(!nc)return;
-  btn.hidden=false;
+  natlReady=true;
   btn.textContent='★ '+nc.start.slice(0,4)+' National Specialty →';
-  btn.addEventListener('click',()=>{location.hash='#show='+NATL;openDetail(nc);});
+  btn.addEventListener('click',()=>{location.hash='#show='+NATL;openFromHash();});
 })();
+syncBreedHeader();
+requestBreedData(true);
 </script>
 </body>
 </html>
@@ -1969,7 +2309,98 @@ openFromHash();
                .replace("__SUBTITLE__", _h(subtitle))
                .replace("__LEGEND__", legend)
                .replace("__NATL__", _h(national_no))
+               .replace("__BREED_API__", _h(BREED_API))
+               .replace("__TZINFO__", json.dumps(tzinfo, separators=(",", ":")))
                .replace("__DATA__", data))
+
+
+def _breed_canon(name):
+    """Comparable form of a breed name, lossy on purpose. PDF text extraction turns
+    'tt', 'tti' and 'ft' into 'ti' ('Setiers', 'Scotish', 'Soti-Coated'), so both
+    sides of a comparison go through the same damage."""
+    s = unicodedata.normalize("NFKD", name or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = s.replace("tti", "ti").replace("tt", "ti").replace("ft", "ti")
+    toks = []
+    for t in re.split(r"[^a-z0-9]+", s):
+        if not t or t == "and":
+            continue
+        t = "mountain" if t == "mtn" else t
+        toks.append(t[:-1] if len(t) > 3 and t.endswith("s") and not t.endswith("ss") else t)
+    return " ".join(toks)
+
+
+def _breed_index(refs):
+    """Canonical name -> AKC code, from AKC's /references breeds plus BREED_ALIASES.
+    A name two codes could claim maps to None: no ring beats the wrong ring."""
+    index, by_display = {}, {}
+    for b in refs:
+        code = (b.get("breedCode") or "").strip()
+        by_display[b.get("displayDescription")] = code
+        for field in ("displayDescription", "fullFormalDescription", "singularDescription"):
+            c = _breed_canon(b.get(field))
+            if c and index.get(c, code) != code:
+                index[c] = None
+            elif c:
+                index[c] = code
+    for alias, display in BREED_ALIASES.items():
+        if by_display.get(display):
+            index[_breed_canon(alias)] = by_display[display]
+    return index
+
+
+def _breed_code(name, index):
+    """AKC code for a breed as a judging program prints it, or None. Exact matches
+    only: a near-miss could put an exhibitor at the wrong ring."""
+    if "finnish spitz" in (name or "").lower():
+        return FS_BREED_CODE
+    return index.get(_breed_canon(name))
+
+
+def _fetch_breed_index():
+    """The breed-name index, or {} if AKC's list is unavailable (FS still works)."""
+    try:
+        r = _session().get(REFERENCES_URL, timeout=POST_TIMEOUT)
+        r.raise_for_status()
+        return _breed_index(r.json().get("breeds") or [])
+    except Exception as e:
+        print("ringcards: AKC breed list unavailable, Finnish Spitz only:", e)
+        return {}
+
+
+def _ring_info(day, entry, code):
+    """One breed's ring panel for one day of a judging program."""
+    group = GROUP_BY_CODE_PREFIX.get(code[:1], "")
+    def mine(g):
+        return (g.get("group") or "").lower().replace(" group", "").strip() == group.lower()
+    grps = day.get("groups") or {}
+    reg = grps.get("regular") or {}
+    startMin = reg.get("startMin")
+    # full regular group running order with est times (start + i*30, matching
+    # the ring card's minPerGroup) so the exhibitor can see who runs before
+    # their group and gauge progress through the day. 30 min/group is a rough
+    # planning figure (AKC ~2.5 min/dog; a group ring holds one dog per
+    # competing breed) — actual length swings with the day's entry, so these
+    # are deliberately "~".
+    gseq = [{"g": g.get("group") or "",
+             "est": _hmm(startMin + gi * 30) if startMin is not None else "",
+             "mine": mine(g)}
+            for gi, g in enumerate(reg.get("order") or [])]
+    # program's Owner-Handled (NOHS) block: the group's judge (AKC fallback) plus
+    # its ring + start time. NOHS groups routinely run BEFORE Regular (AKC
+    # recommends >=30 min earlier), and neither the ring nor the time is in the
+    # AKC feed — only the program has them.
+    nohsblk = grps.get("nohs") or {}
+    nohs = next((g.get("judge") or "" for g in (nohsblk.get("order") or []) if mine(g)), "")
+    return {"ring": entry.get("ring"), "time": entry.get("slotTime"),
+            "ahead": entry.get("ahead") or 0, "count": entry.get("entryCount"),
+            "split": entry.get("split") or "",
+            "prev": entry.get("prevBreed"), "prevN": entry.get("prevN"),
+            "nohs": nohs, "gstart": reg.get("start"), "gmin": startMin,
+            "gring": reg.get("ring"),
+            "ntime": nohsblk.get("start"), "nmin": nohsblk.get("startMin"),
+            "nring": nohsblk.get("ring"), "nfollows": bool(nohsblk.get("follows")),
+            "gseq": gseq}
 
 
 def cmd_ringcards(args):
@@ -2001,6 +2432,8 @@ def cmd_ringcards(args):
     out_dir = Path(args.out) if getattr(args, "out", None) else RINGCARDS_OUT
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest, made, failed = {}, 0, 0
+    breed_index = _fetch_breed_index()
+    rings = {}     # breed code -> {event_no: ring info}, for every breed but FS
     for kb, event_nos in sorted(programs.items()):
         with tempfile.TemporaryDirectory() as td:
             pdf, ij = Path(td) / f"{kb}.pdf", Path(td) / f"{kb}.json"
@@ -2039,11 +2472,39 @@ def cmd_ringcards(args):
             if names:
                 inter.setdefault("show", {})["club"] = names
             ij.write_text(json.dumps(inter), encoding="utf-8")
+            # Per-show ring info for every breed we can name, keyed by AKC breed
+            # code. Deliberately NOT the judge — the AKC feed already gives us
+            # breed/group/BIS judges (more reliable); the judging program's unique
+            # value is ring, time, running order and this-year's count.
+            by_date = {}   # date -> [{code: ring info}, in show order]
+            for d in inter.get("days", []):
+                day = {}
+                for e in d.get("entries", []):
+                    code = _breed_code(e.get("breed"), breed_index)
+                    if code and isinstance(e.get("ring"), int):
+                        day[code] = _ring_info(d, e, code)
+                by_date.setdefault(d.get("date"), []).append(day)
+            # Two shows on one date (Show #1/#2, AM/PM) share a program, and event
+            # numbers don't follow running order -- the cover's listing does. If
+            # the cover doesn't settle which event is which, give that day no
+            # panel rather than the other show's ring.
+            order = inter.get("show", {}).get("eventOrder") or []
+            pick = {}      # event_no -> {code: ring info}
+            for edate in set(event_nos.values()):
+                enos = [e for e, d in event_nos.items() if d == edate]
+                shows = by_date.get(edate) or []
+                if len(shows) == 1:
+                    pick.update({e: shows[0] for e in enos})
+                elif len(shows) == len(enos) and all(e in order for e in enos):
+                    pick.update(zip(sorted(enos, key=order.index), shows))
+            for e, day in pick.items():
+                for code, info in day.items():
+                    if code != FS_BREED_CODE:   # FS is baked into the page itself
+                        rings.setdefault(code, {})[e] = info
             # Only make a card when Finnish Spitz is actually entered and placeable
             # — no point generating an empty "no FS scheduled" card.
-            has_fs = any("finnish spitz" in (e.get("breed") or "").lower()
-                         and isinstance(e.get("ring"), int)
-                         for d in inter.get("days", []) for e in d.get("entries", []))
+            has_fs = any(FS_BREED_CODE in day
+                         for days in by_date.values() for day in days)
             if not has_fs:
                 print(f"ringcard: kb{kb} no Finnish Spitz entered — skipped"); failed += 1; continue
             html = out_dir / f"{kb}.html"
@@ -2053,71 +2514,19 @@ def cmd_ringcards(args):
                                 cwd=str(RINGCARD_DIR), capture_output=True, text=True)
             if r2.returncode != 0 or not html.exists():
                 print(f"ringcard: kb{kb} render failed — {(r2.stderr or '').strip()[:70]}"); failed += 1; continue
-            # Per-day FS ring info so the dashboard can show a "ring of the day"
-            # panel inline. Deliberately NOT the judge — the AKC feed already gives
-            # us breed/group/BIS judges (more reliable); the judging program's
-            # unique value is ring, time, running order and this-year's count.
-            fs_by_date = {}   # date -> [per-show FS info, in show order]
-            for d in inter.get("days", []):
-                grps = d.get("groups") or {}
-                reg = grps.get("regular") or {}
-                startMin = reg.get("startMin")
-                # full regular group running order with est times (start + i*30,
-                # matching the ring card's minPerGroup) so the exhibitor can see
-                # who runs before Non-Sporting and gauge progress through the day.
-                # 30 min/group is a rough planning figure (AKC ~2.5 min/dog; a
-                # group ring holds one dog per competing breed) — actual length
-                # swings with the day's entry, so these are deliberately "~".
-                gseq = []
-                for gi, g in enumerate(reg.get("order") or []):
-                    nm = g.get("group") or ""
-                    gseq.append({"g": nm,
-                                 "est": _hmm(startMin + gi * 30) if startMin is not None else "",
-                                 "mine": "non-sporting" in nm.lower()})
-                # program's Owner-Handled (NOHS) block: Non-Sporting judge (AKC
-                # fallback) plus its ring + start time. NOHS groups routinely run
-                # BEFORE Regular (AKC recommends >=30 min earlier), and neither the
-                # ring nor the time is in the AKC feed — only the program has them.
-                nohsblk = grps.get("nohs") or {}
-                nohs = ""
-                for g in (nohsblk.get("order") or []):
-                    if "non-sporting" in (g.get("group") or "").lower():
-                        nohs = g.get("judge") or ""
-                        break
-                fs = None
-                for e in d.get("entries", []):
-                    if "finnish spitz" in (e.get("breed") or "").lower() and isinstance(e.get("ring"), int):
-                        fs = {
-                            "ring": e.get("ring"), "time": e.get("slotTime"),
-                            "ahead": e.get("ahead") or 0, "count": e.get("entryCount"),
-                            "split": e.get("split") or "",
-                            "prev": e.get("prevBreed"), "prevN": e.get("prevN"),
-                            "nohs": nohs, "gstart": reg.get("start"), "gmin": startMin,
-                            "gring": reg.get("ring"),
-                            "ntime": nohsblk.get("start"), "nmin": nohsblk.get("startMin"),
-                            "nring": nohsblk.get("ring"), "nfollows": bool(nohsblk.get("follows")),
-                            "gseq": gseq}
-                fs_by_date.setdefault(d.get("date"), []).append(fs)
             made += 1
-            # Two shows on one date (Show #1/#2, AM/PM) share a program, and event
-            # numbers don't follow running order -- the cover's listing does. If
-            # the cover doesn't settle which event is which, give that day no
-            # panel rather than the other show's ring.
-            order = inter.get("show", {}).get("eventOrder") or []
-            for edate in set(event_nos.values()):
-                enos = [e for e, d in event_nos.items() if d == edate]
-                shows = fs_by_date.get(edate) or []
-                if len(shows) == 1:
-                    pick = {e: shows[0] for e in enos}
-                elif len(shows) == len(enos) and all(e in order for e in enos):
-                    pick = dict(zip(sorted(enos, key=order.index), shows))
-                else:
-                    pick = {}
-                for e in enos:
-                    manifest[e] = {"card": f"ringcards/{kb}.html", "fs": pick.get(e)}
+            for e in event_nos:
+                manifest[e] = {"card": f"ringcards/{kb}.html",
+                               "fs": (pick.get(e) or {}).get(FS_BREED_CODE)}
     RINGCARD_MANIFEST.write_text(json.dumps(manifest), encoding="utf-8")
+    # One small file per breed; the page fetches only the breeds someone picks.
+    RINGS_OUT.mkdir(parents=True, exist_ok=True)
+    for old in RINGS_OUT.glob("*.json"):
+        old.unlink()
+    for code, shows in rings.items():
+        (RINGS_OUT / f"{code}.json").write_text(json.dumps(shows, separators=(",", ":")), encoding="utf-8")
     print(f"ringcards: {made} card(s), {failed} skipped, {len(manifest)} shows mapped "
-          f"(of {len(programs)} programs)")
+          f"(of {len(programs)} programs); ring data for {len(rings)} other breeds")
 
 
 def cmd_map(args):

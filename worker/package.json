@@ -1,0 +1,13 @@
+{
+  "name": "fsca-akc-breeds",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.158.0"
+  }
+}

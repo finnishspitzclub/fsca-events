@@ -16,6 +16,7 @@ sync.log
 # generated ring cards + their manifest (rebuilt each sync from ringcard/)
 ringcards/
 ringcards-manifest.json
+rings/
 
 # Python
 __pycache__/

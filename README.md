@@ -189,6 +189,25 @@ depends on how that site is hosted — **TBD**:
 - **Manual for now** — `sync` produces the file; upload it yourself until the
   push is wired. Nothing breaks; it's just not yet hands-off.
 
+### Breed picker
+
+Finnish Spitz is baked into the page, so the default view needs nothing else.
+Other breeds come from the Cloudflare Worker in `worker/`, one breed and month
+per request, cached for 24 hours in KV so AKC is asked at most once a day for
+each. The page merges and clusters them in the browser. Ring and group panels
+for other breeds are prebuilt by `sync` into `rings/<breed code>.json` from the
+same judging programs the Finnish Spitz ring cards use.
+
+The Worker deploys separately from the site, to the club's Cloudflare account:
+
+    cd worker
+    npx wrangler whoami   # must say finnishspitzclub@gmail.com
+    npm test
+    npx wrangler deploy
+
+Its mapping (`worker/src/akc.js`) and the page's `clusterShows` mirror
+`map_record` and `cluster_events` in `akcal.py`, so change them together.
+
 ## Roadmap
 
 - **v1** — probe, fetch, store, ics. ✅ verified end to end.
