@@ -1550,6 +1550,13 @@ def render_map_html(events, title, subtitle, national_no=""):
   .showgroups .ge{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.7rem;color:#9a8a7a} .showgroups .gmine .ge{color:#7a2e12}
   .showgroups .gjudges{flex:1;min-width:0;border-left:1px solid #f0d9c4;padding-left:11px;display:flex;flex-direction:column;justify-content:center}
   .showgroups .grow3{font-size:.82rem;color:#4a3f36;line-height:1.9;white-space:nowrap}
+  @media(max-width:520px){
+    .showring,.showgroups{flex:1 1 100%;min-width:0;box-sizing:border-box}
+    .showgroups .gbody{flex-direction:column}
+    .showgroups .gorder{flex:none}
+    .showgroups .gjudges{border-left:0;padding-left:0;border-top:1px solid #f0d9c4;padding-top:7px}
+    .showgroups .grow3{white-space:normal}
+  }
   .grl{display:inline-block;box-sizing:border-box;min-width:40px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.6rem;font-weight:700;background:#f0d9c4;color:#7a2e12;padding:1px 5px;border-radius:3px;margin-right:5px;vertical-align:middle}
   .grl.n{background:#7a2e12;color:#fff} .grl.b{background:#5b4a3d;color:#fff}
   .eclosed{color:#8a4b00;font-weight:700;background:#ffe8cc;padding:1px 8px;border-radius:5px;font-size:.92em}
