@@ -2278,7 +2278,7 @@ function groupPanel(s){
   const g=seq[pick],own=g?owners(g.g):[src];
   const b=own[0];
   const reg=(b&&b.group_judge)||(g&&g.j)||'',oh=(b&&b.nohs_judge)||(g&&g.nj)||(b&&b.rc&&b.rc.nohs)||'';
-  const head=own.length?own.map(x=>x.name).join(' & ')+' judges':(g.g+' Group judges');
+  const head=(g?g.g:groupOf(src.code)).replace(/ Group$/,'')+' judges';
   let gl='<div class="gjhead'+(own.length?' own':'')+'">'+esc(head)+'</div>';
   if(reg)gl+='<div class="grow3"><span class="grl">Reg</span> '+esc(reg)+'</div>';
   if(oh)gl+='<div class="grow3"><span class="grl n">NOHS</span> '+esc(oh)+'</div>';
